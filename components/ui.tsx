@@ -125,7 +125,7 @@ export function PageHeader({ eyebrow, title, children }: { eyebrow?: string; tit
 }
 
 export function formatDate(iso: string) {
-  // SQLite datetime('now') is UTC without a zone marker.
+  // Timestamps are ISO strings; older rows may be "YYYY-MM-DD HH:MM:SS" in UTC without a zone marker.
   const d = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
   return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }

@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local database (candidate data)
+# local data (candidate results, settings)
 /data
