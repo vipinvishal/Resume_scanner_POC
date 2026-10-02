@@ -1,0 +1,23 @@
+PRIYA SHARMA
+Software Developer | Bengaluru, India
+priya.sharma@example.com
+
+PROFILE
+Java developer with 3.5 years of experience building internal business applications.
+
+EXPERIENCE
+Software Developer — BrightWorks IT Services, Bengaluru (Jan 2022 – Present)
+- Develop and maintain REST APIs in Java using Spring Boot for an internal HR portal
+- Work with MySQL for data storage and write SQL queries and stored procedures
+- Write unit tests using JUnit
+- Deployed applications to AWS EC2 with guidance from the DevOps team
+- Basic exposure to message queues (RabbitMQ) in one module
+
+Junior Developer — CodeCraft Solutions, Bengaluru (Jun 2021 – Dec 2021)
+- Fixed bugs and built small features in a Java web application
+
+SKILLS
+Java, Spring Boot, REST APIs, MySQL, JUnit, Git, Maven, basic AWS EC2, basic Docker
+
+EDUCATION
+B.Tech Information Technology — VTU, 2021

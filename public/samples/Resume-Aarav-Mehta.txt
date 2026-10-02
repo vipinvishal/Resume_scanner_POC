@@ -1,0 +1,25 @@
+AARAV MEHTA
+Senior Backend Engineer | Pune, India
+aarav.mehta@example.com | +91 98765 43210
+
+SUMMARY
+Backend engineer with 7 years of experience building high-volume payment and banking services in Java. Comfortable owning services from design to production.
+
+EXPERIENCE
+Senior Software Engineer — FinPay Technologies, Pune (Mar 2021 – Present)
+- Lead a team of 4 building payment authorisation microservices using Java 17 and Spring Boot, processing 2M+ transactions per day
+- Designed REST APIs and event-driven flows using Apache Kafka for transaction status updates
+- Migrated services to AWS (EKS, RDS PostgreSQL, S3), cutting infrastructure cost by 22%
+- Wrote unit and integration tests with JUnit and Mockito; raised coverage from 55% to 85%
+- Set up CI/CD with GitHub Actions and Docker
+
+Software Engineer — Nimbus Banking Solutions, Mumbai (Jul 2018 – Feb 2021)
+- Built core banking APIs in Java and Spring Boot with MySQL
+- Implemented batch reconciliation jobs and reporting services
+- Supported production incidents and improved monitoring
+
+SKILLS
+Java, Spring Boot, Spring Cloud, REST, Microservices, Kafka, PostgreSQL, MySQL, AWS (EKS, EC2, S3, RDS), Docker, GitHub Actions, JUnit, Mockito
+
+EDUCATION
+B.E. Computer Engineering — Savitribai Phule Pune University, 2018

@@ -1,0 +1,22 @@
+ROHAN VERMA
+Frontend Developer | Delhi, India
+rohan.verma@example.com
+
+SUMMARY
+Creative frontend developer with 4 years of experience building responsive websites and web apps.
+
+EXPERIENCE
+Frontend Developer — PixelCraft Studio, Delhi (2021 – Present)
+- Build responsive web interfaces using React, TypeScript and Tailwind CSS
+- Work with designers to turn Figma designs into pixel-perfect pages
+- Improve page speed and accessibility scores
+- Integrate REST APIs built by the backend team
+
+UI Developer — WebNest Agency, Delhi (2020 – 2021)
+- Built landing pages with HTML, CSS and JavaScript
+
+SKILLS
+React, TypeScript, JavaScript, HTML, CSS, Tailwind, Figma, Git
+
+EDUCATION
+BCA — Delhi University, 2020

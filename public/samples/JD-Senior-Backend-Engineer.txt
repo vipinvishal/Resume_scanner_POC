@@ -1,0 +1,29 @@
+Senior Backend Engineer — Payments Platform
+Location: Pune (Hybrid) | Employment: Full-time
+
+About the role
+We are looking for a Senior Backend Engineer to build and scale the services behind our digital payments platform. You will design APIs, own services end to end, and work closely with product and QA teams.
+
+Responsibilities
+- Design, build and maintain scalable microservices for payment processing
+- Develop secure REST APIs consumed by web and mobile apps
+- Work with event-driven systems to process transactions in real time
+- Deploy and operate services on cloud infrastructure
+- Review code, mentor junior engineers and improve engineering practices
+
+Required skills
+- 5+ years of backend development experience
+- Strong hands-on experience with Java and Spring Boot
+- Experience designing REST APIs and microservices
+- Experience with Apache Kafka or similar messaging systems
+- Strong knowledge of SQL databases (PostgreSQL or MySQL)
+- Experience with AWS (EC2, EKS, S3, RDS)
+- Experience with unit and integration testing (JUnit, Mockito)
+
+Good to have
+- Experience with Kubernetes and Docker
+- Knowledge of payment systems or fintech domain
+- CI/CD pipelines (Jenkins, GitHub Actions)
+
+Education
+Bachelor's degree in Computer Science, Engineering or a related field.

@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TalentLens — Resume screening POC
 
-## Getting Started
+Compare resumes against a job description, get an HR-readable report, and record the decision
+(**Accept → L1/L2**, **Talk to candidate**, or **Reject**). Everything is saved to a local SQLite file.
 
-First, run the development server:
+## Run it
+
+Needs **Node.js 20+**.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+For a smoother demo (faster, no dev overlay):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+npm start              # http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Sign in with ID `demo` / password `demo` (hard-coded in `lib/auth.ts`).
 
-## Learn More
+## Choose the AI engine (Settings page)
 
-To learn more about Next.js, take a look at the following resources:
+| Where you are | Pick | What to do |
+|---|---|---|
+| Personal laptop | **Gemini** | Paste your API key, click **Fetch models**, choose one, **Test connection**, **Save**. |
+| Office laptop | **Ollama** | Make sure Ollama is running (`ollama serve`) and the model is pulled (e.g. `ollama pull qwen3:8b`). Click **Fetch models** — your installed models appear in the dropdown — pick Qwen, **Test connection**, **Save**. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The engine and model currently in use are always shown at the bottom of the sidebar.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Where the data lives
 
-## Deploy on Vercel
+`data/screening.db` — a single SQLite file, created automatically on first run. No server, no cost.
+Back it up or move it by copying that file. **Delete it to reset the demo.** It is git-ignored.
+It contains candidate data (and your Gemini key, in plain text), so keep it on the laptop.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## How the score works
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The LLM only *reads and compares*; the score and recommendation are calculated in code, so the same
+resume always gets the same verdict:
+
+- Skills match — 70% (must-have skills count 3×, nice-to-have 1×; present = full, partial = half)
+- Experience fit — 20%
+- Education fit — 10%
+
+Default levels: **75+ Accept**, **50–74 Talk to candidate**, **below 50 Reject**. Change them in Settings.
+
+## Try it fast
+
+On *Instant analysis* or *Bulk upload*, click **Fill with sample data** (files are in `public/samples`).
+
+## Notes / limits
+
+- PDF, DOCX and TXT are supported. Scanned (image-only) PDFs are not (no OCR yet).
+- Bulk mode screens resumes one at a time — gentle on Gemini rate limits and on a local model.
+- Local models can take 30–90 s per resume depending on the laptop; use a smaller model if it is too slow.
+- Next.js 16: see `AGENTS.md` before changing framework-level code.
