@@ -1,13 +1,30 @@
-# TalentLens — Resume screening POC
+# TalentLens — AI Resume Screening POC
 
-Compare resumes against a job description, get an HR-readable report, and record the decision
-(**Accept → L1/L2**, **Talk to candidate**, or **Reject**). Everything is saved to a local SQLite file.
+Screen resumes against a job description and get an HR-readable report in seconds. The AI reads and compares; the **score and recommendation are calculated in code**, so the same resume always gets the same verdict. HR then records the final decision, and everything is saved to a local SQLite file.
 
-## Run it
+> **Proof of concept.** Demo credentials are hard-coded and there is no multi-user support. Do not expose it to the internet. See [Limitations](#limitations).
 
-Needs **Node.js 20+**.
+## Features
+
+- **Instant analysis** — one job description, one resume, full report (ideal for a walk-in or referral).
+- **Bulk upload** — one job description, many resumes, ranked shortlist; decide candidate by candidate.
+- **HR decisions** — *Accept → L1/L2*, *Talk to candidate*, or *Reject*, with a note and status history.
+- **Candidates register** — search and filter by status, job and date; export to CSV.
+- **Two AI engines** — Google **Gemini** (cloud) or **Ollama** (fully local, e.g. Qwen). Switch in Settings.
+- **PDF, DOCX and TXT** resumes supported.
+- **Local-first** — all data lives in one SQLite file on your machine.
+
+## Tech stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · better-sqlite3 · Zod · `unpdf` + `mammoth` for parsing
+
+## Getting started
+
+Requires **Node.js 20+**.
 
 ```bash
+git clone https://github.com/vipinvishal/Resume_scanner_POC.git
+cd Resume_scanner_POC
 npm install
 npm run dev            # http://localhost:3000
 ```
@@ -16,44 +33,87 @@ For a smoother demo (faster, no dev overlay):
 
 ```bash
 npm run build
-npm start              # http://localhost:3000
+npm start
 ```
 
-Sign in with ID `demo` / password `demo` (hard-coded in `lib/auth.ts`).
+Sign in with ID **`demo`** / password **`demo`** (defined in [lib/auth.ts](lib/auth.ts)).
 
-## Choose the AI engine (Settings page)
+### Try it fast
+
+On *Instant analysis* or *Bulk upload*, click **Fill with sample data**. The sample JD and resumes are in [public/samples](public/samples).
+
+## Choose the AI engine
+
+Open **Settings**. The active engine and model are always shown at the bottom of the sidebar.
 
 | Where you are | Pick | What to do |
 |---|---|---|
-| Personal laptop | **Gemini** | Paste your API key, click **Fetch models**, choose one, **Test connection**, **Save**. |
-| Office laptop | **Ollama** | Make sure Ollama is running (`ollama serve`) and the model is pulled (e.g. `ollama pull qwen3:8b`). Click **Fetch models** — your installed models appear in the dropdown — pick Qwen, **Test connection**, **Save**. |
+| Personal laptop | **Gemini** | Paste your API key → **Fetch models** → choose one → **Test connection** → **Save**. |
+| Office / offline | **Ollama** | Run `ollama serve` and pull a model (e.g. `ollama pull qwen3:8b`) → **Fetch models** → pick it → **Test connection** → **Save**. Default URL is `http://localhost:11434`. |
 
-The engine and model currently in use are always shown at the bottom of the sidebar.
+## How scoring works
 
-## Where the data lives
+The LLM extracts and compares facts. A deterministic formula turns them into a score:
 
-`data/screening.db` — a single SQLite file, created automatically on first run. No server, no cost.
-Back it up or move it by copying that file. **Delete it to reset the demo.** It is git-ignored.
-It contains candidate data (and your Gemini key, in plain text), so keep it on the laptop.
+| Component | Weight | Notes |
+|---|---|---|
+| Skills match | 70% | Must-have skills count 3×, nice-to-have 1×; present = full credit, partial = half |
+| Experience fit | 20% | |
+| Education fit | 10% | |
 
-## How the score works
+Default recommendation levels (adjustable in Settings):
 
-The LLM only *reads and compares*; the score and recommendation are calculated in code, so the same
-resume always gets the same verdict:
+| Score | Recommendation |
+|---|---|
+| 75+ | **Accept** |
+| 50–74 | **Talk to candidate** |
+| below 50 | **Reject** |
 
-- Skills match — 70% (must-have skills count 3×, nice-to-have 1×; present = full, partial = half)
-- Experience fit — 20%
-- Education fit — 10%
+The HR decision is stored separately from the AI recommendation, so you can always see where a person overrode the AI.
 
-Default levels: **75+ Accept**, **50–74 Talk to candidate**, **below 50 Reject**. Change them in Settings.
+## How it works
 
-## Try it fast
+```
+Resume (PDF/DOCX/TXT) ─▶ lib/parse.ts ─▶ text
+Job description ────────────────────────▶ LLM extracts requirements (stored with the job)
+text + requirements ─▶ LLM compares ─▶ validated JSON (Zod, one auto-retry)
+                                      └▶ lib/analyze.ts computes score + verdict
+                                          └▶ saved to SQLite ─▶ report + HR decision
+```
 
-On *Instant analysis* or *Bulk upload*, click **Fill with sample data** (files are in `public/samples`).
+Local models are sloppier than Gemini at structured output, so responses are normalised (e.g. `"partially"` → `partial`) and validated before use.
 
-## Notes / limits
+## Project structure
 
-- PDF, DOCX and TXT are supported. Scanned (image-only) PDFs are not (no OCR yet).
-- Bulk mode screens resumes one at a time — gentle on Gemini rate limits and on a local model.
-- Local models can take 30–90 s per resume depending on the laptop; use a smaller model if it is too slow.
-- Next.js 16: see `AGENTS.md` before changing framework-level code.
+```
+app/
+  (app)/          Signed-in pages: home, analyze, bulk, candidates, settings
+  api/            Route handlers: analyze, candidates (+ CSV export), jobs, settings, stats, auth
+  signin/         Sign-in page
+components/       Shell, report, decision panel, inputs, UI primitives
+lib/
+  llm/            Provider adapters (gemini.ts, ollama.ts) + JSON extraction/validation
+  analyze.ts      Prompts, schemas and the scoring formula
+  db.ts           SQLite schema and queries
+  parse.ts        PDF / DOCX / TXT text extraction
+  auth.ts         Demo session handling
+public/samples/   Sample job description and resumes
+```
+
+## Data and privacy
+
+- Data is stored in `data/screening.db`, created automatically on first run. Copy the file to back it up; **delete it to reset the demo**.
+- It is **git-ignored**. It contains candidate data **and your Gemini API key in plain text**, so keep it on the laptop.
+- With **Ollama**, resume text never leaves your machine. With **Gemini**, resume and JD text is sent to Google's API.
+
+## Limitations
+
+- Scanned (image-only) PDFs are not supported — no OCR yet.
+- Single hard-coded demo login; no roles, no per-user audit trail.
+- API key is stored unencrypted in SQLite.
+- Bulk mode screens resumes one at a time (gentle on Gemini rate limits and local models).
+- Local models can take 30–90 s per resume; use a smaller model if it is too slow.
+
+## Contributing note
+
+This project uses Next.js 16, which has breaking changes from earlier versions. See [AGENTS.md](AGENTS.md) before changing framework-level code.
