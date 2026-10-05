@@ -67,7 +67,7 @@ OpenAI and Anthropic also have an *Advanced* box to use a different API address,
 | Type | What you enter |
 |---|---|
 | **SQLite (built in)** | Nothing — a file (`data/talentlens.db`) is created for you. Good for a quick start. |
-| **PostgreSQL** / **MySQL / MariaDB** / **SQL Server** | Server address, port (optional), database name, user and password. The database must already exist; TalentLens creates its own tables inside it, all named `tl_…`, so it can sit next to other data. |
+| **PostgreSQL** / **MySQL / MariaDB** / **SQL Server** | Server address, port (optional), database name, user and password. If the database doesn't exist yet, TalentLens **creates it for you** (the login needs permission to create databases — for PostgreSQL that is usually `postgres`) and sets up its own tables inside it, all named `tl_…`, so it can sit next to other data. If the login isn't allowed to create databases, the screen says so in plain words and you can ask your admin to create an empty one. |
 
 When you press **Save**, the connection is tested first. A setting that doesn't work is refused, so you can't lock yourself out. Switching to a different database starts with an empty list; records already saved stay in the old one.
 

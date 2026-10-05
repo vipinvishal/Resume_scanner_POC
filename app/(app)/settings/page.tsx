@@ -101,7 +101,7 @@ export default function SettingsPage() {
     setDbTest(null);
     const { ok, data } = await post("/api/settings/db", { db: f!.db });
     setDbTesting(false);
-    setDbTest(ok ? { ok: true, text: "Connected — the database is ready to use." } : { ok: false, text: data.error });
+    setDbTest(ok ? { ok: true, text: data.created ? `Created the new database "${data.database}" and set it up — ready to use.` : "Connected — the database is ready to use." } : { ok: false, text: data.error });
   }
 
   async function save() {
@@ -249,7 +249,7 @@ export default function SettingsPage() {
                 <div>
                   <label htmlFor="dbname" className="mb-1.5 block text-sm font-medium">Database name</label>
                   <input id="dbname" className={field} value={f.db.database} onChange={(e) => setDb("database", e.target.value)} />
-                  <p className="mt-1.5 text-xs text-ink-soft">The database must already exist. TalentLens creates its own tables inside it (names start with <code className="font-mono">tl_</code>).</p>
+                  <p className="mt-1.5 text-xs text-ink-soft">Don&apos;t worry if it doesn&apos;t exist yet — TalentLens creates it for you (the login needs permission to create databases) and sets up its own tables inside it (names start with <code className="font-mono">tl_</code>).</p>
                 </div>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div>

@@ -12,8 +12,8 @@ export async function POST(req: Request) {
   if (problem) return Response.json({ ok: false, error: problem }, { status: 400 });
   const t0 = Date.now();
   try {
-    await testDatabase(db);
-    return Response.json({ ok: true, ms: Date.now() - t0 });
+    const { created } = await testDatabase(db);
+    return Response.json({ ok: true, ms: Date.now() - t0, created, database: db.database });
   } catch (e) {
     return Response.json({ ok: false, error: (e as Error).message }, { status: 400 });
   }

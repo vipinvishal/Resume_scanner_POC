@@ -17,7 +17,10 @@ export async function openMysql(cfg: DbConfig): Promise<Driver> {
     connectTimeout: 8000,
     connectionLimit: 5,
   });
-  await pool.query("SELECT 1"); // fail early, with the real reason
+  await pool.query("SELECT 1").catch(async (e) => {
+    await pool.end().catch(() => {});
+    throw e; // fail early, with the real reason
+  });
 
   return {
     async all<T = Row>(sql: string, params?: unknown[]) {

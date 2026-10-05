@@ -17,7 +17,10 @@ export async function openPostgres(cfg: DbConfig): Promise<Driver> {
     max: 5,
   });
   pool.on("error", () => {}); // an idle connection dropping must not crash the server
-  await pool.query("SELECT 1"); // fail early, with the real reason
+  await pool.query("SELECT 1").catch(async (e) => {
+    await pool.end().catch(() => {});
+    throw e; // fail early, with the real reason
+  });
 
   return {
     async all<T = Row>(sql: string, params?: unknown[]) {

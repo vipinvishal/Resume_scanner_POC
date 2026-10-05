@@ -20,9 +20,10 @@ export async function PUT(req: Request) {
   if (problem) return fail(new Error(problem), 400);
 
   // Never save a database setting that doesn't work — that would lock HR out of the Candidates tab.
+  let createdDb = false;
   if (JSON.stringify(next.db) !== JSON.stringify(saved.db)) {
     try {
-      await testDatabase(next.db);
+      createdDb = (await testDatabase(next.db)).created;
     } catch (e) {
       return fail(e, 400);
     }
@@ -36,6 +37,7 @@ export async function PUT(req: Request) {
   if ((["openaiKey", "anthropicKey", "geminiKey"] as const).some((k) => saved[k] !== next[k])) changes.push("an API key was updated");
   if (saved.db.type !== next.db.type) changes.push(`database: ${DB_LABEL[saved.db.type]} → ${DB_LABEL[next.db.type]}`);
   else if (JSON.stringify({ ...saved.db, password: "" }) !== JSON.stringify({ ...next.db, password: "" })) changes.push("database connection details");
+  if (createdDb) changes.push(`created the new database "${next.db.database}"`);
   if (saved.db.password !== next.db.password) changes.push("the database password was updated");
   if (saved.acceptThreshold !== next.acceptThreshold || saved.talkThreshold !== next.talkThreshold)
     changes.push(`recommendation levels: accept ${next.acceptThreshold}+, talk ${next.talkThreshold}+`);

@@ -23,6 +23,7 @@ import { openMssql } from "./store/mssql";
 import { openMysql } from "./store/mysql";
 import { openPostgres } from "./store/postgres";
 import { openSqlite } from "./store/sqlite";
+import { FriendlyDbError, createDatabase, isMissingDatabase } from "./store/create";
 import { TABLES, type Driver } from "./store/types";
 
 export { DEFAULT_SETTINGS, getSettings, saveSettings } from "./settings";
@@ -45,15 +46,33 @@ const OPENERS: Record<DbType, (c: DbConfig) => Promise<Driver>> = {
   mssql: openMssql,
 };
 
-/** Open a connection and make sure our tables exist. Throws an error HR can act on. */
-export async function connect(cfg: DbConfig): Promise<Driver> {
-  let d: Driver | undefined;
+/**
+ * Open a connection and make sure our tables exist. If the database named in the settings doesn't
+ * exist yet, it is created first (`state.created` is set so the caller can say so).
+ * Throws an error HR can act on.
+ */
+export async function connect(cfg: DbConfig, state?: { created: boolean }): Promise<Driver> {
+  const attempt = async () => {
+    const d = await OPENERS[cfg.type](cfg);
+    try {
+      await d.migrate();
+      return d;
+    } catch (e) {
+      await d.close().catch(() => {});
+      throw e;
+    }
+  };
   try {
-    d = await OPENERS[cfg.type](cfg);
-    await d.migrate();
-    return d;
+    try {
+      return await attempt();
+    } catch (e) {
+      if (!isMissingDatabase(cfg.type, e)) throw e;
+      await createDatabase(cfg);
+      if (state) state.created = true;
+      return await attempt();
+    }
   } catch (e) {
-    await d?.close().catch(() => {});
+    if (e instanceof FriendlyDbError) throw e;
     const raw = (e as { message?: string; code?: string }).message || (e as { code?: string }).code || String(e);
     const where = cfg.type === "sqlite" ? cfg.file : `${cfg.host}${cfg.port ? `:${cfg.port}` : ""}/${cfg.database}`;
     const hint = /ERR_UNKNOWN_BUILTIN_MODULE|node:sqlite/.test(raw) ? " SQLite needs Node.js 22.13 or newer." : "";
@@ -61,10 +80,12 @@ export async function connect(cfg: DbConfig): Promise<Driver> {
   }
 }
 
-/** Connect, create the tables if needed, and disconnect — used by "Test connection" and before saving. */
-export async function testDatabase(cfg: DbConfig): Promise<void> {
-  const d = await connect(cfg);
+/** Connect (creating the database and tables if needed) and disconnect — used by "Test connection" and before saving. */
+export async function testDatabase(cfg: DbConfig): Promise<{ created: boolean }> {
+  const state = { created: false };
+  const d = await connect(cfg, state);
   await d.close();
+  return state;
 }
 
 declare global {

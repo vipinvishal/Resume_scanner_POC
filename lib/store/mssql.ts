@@ -16,7 +16,10 @@ export async function openMssql(cfg: DbConfig): Promise<Driver> {
     pool: { max: 5 },
   });
   pool.on("error", () => {});
-  await pool.connect(); // fail early, with the real reason
+  await pool.connect().catch(async (e) => {
+    await pool.close().catch(() => {});
+    throw e; // fail early, with the real reason
+  });
 
   const exec = async (text: string, params: unknown[] = []) => {
     const req = pool.request();
