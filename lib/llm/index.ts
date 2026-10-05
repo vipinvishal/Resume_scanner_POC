@@ -1,8 +1,17 @@
 import { z } from "zod";
-import { getSettings } from "../db";
-import type { Settings } from "../types";
+import { getSettings } from "../settings";
+import type { Provider, Settings } from "../types";
+import { anthropicChat, anthropicModels } from "./anthropic";
 import { geminiChat, geminiModels } from "./gemini";
 import { ollamaChat, ollamaModels } from "./ollama";
+import { openaiChat, openaiModels } from "./openai";
+
+export const PROVIDER_LABEL: Record<Provider, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Google Gemini",
+  ollama: "Ollama (local)",
+};
 
 export interface LlmRequest {
   system: string;
@@ -12,23 +21,33 @@ export interface LlmRequest {
 }
 
 export function activeModel(s: Settings = getSettings()): string {
-  return s.provider === "gemini" ? s.geminiModel : s.ollamaModel;
+  return { openai: s.openaiModel, anthropic: s.anthropicModel, gemini: s.geminiModel, ollama: s.ollamaModel }[s.provider];
 }
 
+/** What is still missing before the chosen provider can be used ("" when ready). */
+export function missingSetup(s: Settings): string {
+  const name = PROVIDER_LABEL[s.provider];
+  if (s.provider !== "ollama" && !s[`${s.provider}Key` as "geminiKey"].trim()) return `${name} is selected but no API key is set. Open Settings and paste your key.`;
+  if (!activeModel(s).trim()) return `${name} is selected but no model is chosen. Open Settings and pick a model.`;
+  return "";
+}
+
+export const isConfigured = (s: Settings = getSettings()) => !missingSetup(s);
+
 export function assertConfigured(s: Settings) {
-  if (s.provider === "gemini" && !s.geminiKey.trim())
-    throw new Error("Gemini is selected but no API key is set. Open Settings and paste your key.");
-  if (s.provider === "ollama" && !s.ollamaModel.trim())
-    throw new Error("Ollama is selected but no model is chosen. Open Settings and pick a model.");
+  const why = missingSetup(s);
+  if (why) throw new Error(why);
 }
 
 export async function chatRaw(req: LlmRequest, s: Settings = getSettings()): Promise<string> {
   assertConfigured(s);
-  return s.provider === "gemini" ? geminiChat(s, req) : ollamaChat(s, req);
+  const chat = { openai: openaiChat, anthropic: anthropicChat, gemini: geminiChat, ollama: ollamaChat }[s.provider];
+  return chat(s, req);
 }
 
 export async function listModels(s: Settings): Promise<string[]> {
-  return s.provider === "gemini" ? geminiModels(s) : ollamaModels(s);
+  const list = { openai: openaiModels, anthropic: anthropicModels, gemini: geminiModels, ollama: ollamaModels }[s.provider];
+  return list(s);
 }
 
 /** Pull a JSON object out of whatever the model returned (think tags, fences, chatter). */

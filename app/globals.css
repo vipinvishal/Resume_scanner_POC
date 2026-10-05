@@ -121,3 +121,17 @@ body {
   .print-card { box-shadow: none !important; break-inside: avoid; }
   .app-shell-main { padding: 0 !important; }
 }
+
+/* ───── Chart colours (checked with the data-viz palette validator) ─────
+   Outcome colours reuse the app's accept / talk / reject meaning. They are stacked in the order
+   accepted → talk → pending → rejected so red and amber never touch; "pending" is a deliberate neutral. */
+.viz {
+  --viz-accepted: #16895a;
+  --viz-talk: #d08a0a;
+  --viz-pending: #6b7a99;
+  --viz-rejected: #c8392b;
+  --viz-single: var(--color-forest);
+  --viz-grid: var(--color-line);
+  --viz-axis: var(--color-line-strong);
+  --viz-muted: var(--color-ink-faint);
+}

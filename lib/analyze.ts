@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateJson } from "./llm";
-import { getSettings } from "./db";
+import { getSettings } from "./settings";
 import type { FitBlock, JobRequirements, Report, Settings, Verdict } from "./types";
 
 const MAX_JD_CHARS = 12_000;
@@ -127,7 +127,6 @@ const ResumeSchema = z.object({
   strengths: listOfText(6),
   gaps: listOfText(6),
   risks: listOfText(5),
-  screeningQuestions: listOfText(6),
 });
 
 export async function analyzeResume(
@@ -164,7 +163,6 @@ Instructions:
 - "strengths": 3-5 short bullet points on what stands out positively for THIS role.
 - "gaps": up to 5 short bullet points on important things from the job that the resume lacks.
 - "risks": up to 4 things HR should double-check (e.g. frequent job changes, unexplained career gaps, vague claims, very short stints). Empty array if none.
-- "screeningQuestions": 4-5 specific questions HR can ask on a quick call to clear up gaps or verify claims.
 
 RESUME (file: ${fileName}):
 """
@@ -257,6 +255,5 @@ function buildReport(req: JobRequirements, out: z.infer<typeof ResumeSchema>, fi
     strengths: nonEmpty(out.strengths),
     gaps: nonEmpty(out.gaps),
     risks: nonEmpty(out.risks),
-    screeningQuestions: nonEmpty(out.screeningQuestions),
   };
 }

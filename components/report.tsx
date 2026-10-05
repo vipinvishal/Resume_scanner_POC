@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Briefcase, CircleHelp, GraduationCap, Mail, MapPin, Phone, ThumbsUp, Target } from "lucide-react";
+import { AlertTriangle, Briefcase, Lock, CircleHelp, GraduationCap, Mail, MapPin, Phone, ThumbsUp, Target } from "lucide-react";
 import type { FitBlock, Report, SkillStatus } from "@/lib/types";
 import { Card, ScoreRing, VerdictBadge, cx, verdictColor } from "./ui";
 
@@ -95,7 +95,7 @@ function BulletCard({ title, items, tone, icon: Icon, empty }: { title: string; 
   );
 }
 
-export default function ReportView({ report: r, jobTitle, fileName }: { report: Report; jobTitle: string; fileName?: string }) {
+export default function ReportView({ report: r, jobTitle, fileName, mandatoryIds = [] }: { report: Report; jobTitle: string; fileName?: string; mandatoryIds?: string[] }) {
   const must = r.skills.filter((s) => s.type === "must");
   const nice = r.skills.filter((s) => s.type === "nice");
   const count = (list: typeof must, st: SkillStatus) => list.filter((s) => s.status === st).length;
@@ -164,7 +164,14 @@ export default function ReportView({ report: r, jobTitle, fileName }: { report: 
                   const st = SKILL_STYLE[s.status];
                   return (
                     <li key={s.id} className="grid gap-x-6 gap-y-1 bg-paper/40 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1.4fr)] sm:items-center">
-                      <span className="font-medium">{s.requirement}</span>
+                      <span className="font-medium">
+                        {s.requirement}
+                        {mandatoryIds.includes(s.id) && (
+                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-forest px-2 py-0.5 align-middle text-[0.68rem] font-semibold text-paper">
+                            <Lock size={10} /> Mandatory
+                          </span>
+                        )}
+                      </span>
                       <span className={cx("w-fit rounded-full px-2.5 py-1 text-xs font-semibold", st.cls)}>
                         <span className={cx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle", st.dot)} />
                         {st.label}
@@ -191,23 +198,6 @@ export default function ReportView({ report: r, jobTitle, fileName }: { report: 
         <BulletCard title="Gaps" items={r.gaps} tone="text-talk" icon={AlertTriangle} empty="No major gaps found." />
         <BulletCard title="Double-check" items={r.risks} tone="text-reject" icon={CircleHelp} empty="No red flags spotted." />
       </div>
-
-      {/* ───── Questions ───── */}
-      {r.screeningQuestions.length > 0 && (
-        <Card className="p-7">
-          <SectionTitle icon={ArrowRight} sub="Handy for a quick screening call — especially for ‘talk to candidate’.">
-            Questions to ask the candidate
-          </SectionTitle>
-          <ol className="space-y-3">
-            {r.screeningQuestions.map((q, i) => (
-              <li key={i} className="flex gap-4 rounded-2xl border border-line bg-paper/50 px-5 py-3.5">
-                <span className="font-display text-xl font-semibold text-forest">{i + 1}</span>
-                <span className="leading-relaxed">{q}</span>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      )}
     </div>
   );
 }

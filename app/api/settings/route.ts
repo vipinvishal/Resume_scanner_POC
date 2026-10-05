@@ -1,34 +1,44 @@
-import { guard } from "@/lib/auth";
-import { getSettings, saveSettings } from "@/lib/db";
-import type { Settings } from "@/lib/types";
-
-const mask = (s: Settings) => ({ ...s, geminiKey: "", hasGeminiKey: !!s.geminiKey });
+import { fail } from "@/lib/api";
+import { currentActor, guard } from "@/lib/auth";
+import { DB_LABEL, getSettings, logAudit, saveSettings, testDatabase } from "@/lib/db";
+import { PROVIDER_LABEL, activeModel } from "@/lib/llm";
+import { applyForm, validate } from "@/lib/settings";
+import { publicSettings } from "@/lib/settings-public";
 
 export async function GET() {
   const g = await guard();
   if (g) return g;
-  return Response.json(mask(getSettings()));
+  return Response.json(publicSettings(getSettings()));
 }
 
 export async function PUT(req: Request) {
   const g = await guard();
   if (g) return g;
-  const b = (await req.json()) as Partial<Settings>;
-  const patch: Partial<Settings> = {};
-  if (b.provider === "gemini" || b.provider === "ollama") patch.provider = b.provider;
-  // An empty key in the form means "keep the saved one".
-  if (typeof b.geminiKey === "string" && b.geminiKey.trim()) patch.geminiKey = b.geminiKey.trim();
-  if (typeof b.geminiModel === "string" && b.geminiModel.trim()) patch.geminiModel = b.geminiModel.trim();
-  if (typeof b.ollamaUrl === "string" && b.ollamaUrl.trim()) patch.ollamaUrl = b.ollamaUrl.trim();
-  if (typeof b.ollamaModel === "string") patch.ollamaModel = b.ollamaModel.trim();
-  const acc = Number(b.acceptThreshold);
-  const talk = Number(b.talkThreshold);
-  if (Number.isFinite(acc) && Number.isFinite(talk)) {
-    if (!(talk >= 1 && acc <= 100 && talk < acc))
-      return Response.json({ error: "Thresholds must satisfy: reject level < accept level, within 1–100." }, { status: 400 });
-    patch.acceptThreshold = Math.round(acc);
-    patch.talkThreshold = Math.round(talk);
+  const saved = getSettings();
+  const next = applyForm(saved, await req.json());
+  const problem = validate(next);
+  if (problem) return fail(new Error(problem), 400);
+
+  // Never save a database setting that doesn't work — that would lock HR out of the Candidates tab.
+  if (JSON.stringify(next.db) !== JSON.stringify(saved.db)) {
+    try {
+      await testDatabase(next.db);
+    } catch (e) {
+      return fail(e, 400);
+    }
   }
-  saveSettings(patch);
-  return Response.json(mask(getSettings()));
+  const result = saveSettings(next);
+
+  // Record what changed (never the secrets themselves).
+  const changes: string[] = [];
+  if (saved.provider !== next.provider) changes.push(`AI provider: ${PROVIDER_LABEL[saved.provider]} → ${PROVIDER_LABEL[next.provider]}`);
+  else if (activeModel(saved) !== activeModel(next)) changes.push(`AI model: ${activeModel(saved) || "none"} → ${activeModel(next)}`);
+  if ((["openaiKey", "anthropicKey", "geminiKey"] as const).some((k) => saved[k] !== next[k])) changes.push("an API key was updated");
+  if (saved.db.type !== next.db.type) changes.push(`database: ${DB_LABEL[saved.db.type]} → ${DB_LABEL[next.db.type]}`);
+  else if (JSON.stringify({ ...saved.db, password: "" }) !== JSON.stringify({ ...next.db, password: "" })) changes.push("database connection details");
+  if (saved.db.password !== next.db.password) changes.push("the database password was updated");
+  if (saved.acceptThreshold !== next.acceptThreshold || saved.talkThreshold !== next.talkThreshold)
+    changes.push(`recommendation levels: accept ${next.acceptThreshold}+, talk ${next.talkThreshold}+`);
+  if (changes.length) await logAudit({ actor: currentActor(), action: "settings_changed", summary: `Settings changed — ${changes.join("; ")}` }).catch(() => {});
+  return Response.json(publicSettings(result));
 }

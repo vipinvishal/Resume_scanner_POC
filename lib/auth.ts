@@ -5,6 +5,9 @@ export const SESSION_COOKIE = "tl_session";
 export const DEMO_USER = "demo";
 export const DEMO_PASS = "demo";
 
+/** Who is signed in, for the audit trail. (One demo user for now; a real login would put the user name here.) */
+export const currentActor = () => DEMO_USER;
+
 export async function isAuthed(): Promise<boolean> {
   const c = await cookies();
   return c.get(SESSION_COOKIE)?.value === "ok";
