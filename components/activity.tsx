@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Download, FileSearch, Gavel, Loader2, Lock, Search, Settings2, Trash2, Briefcase } from "lucide-react";
+import { Download, FileSearch, Gavel, GitMerge, Loader2, Lock, Search, Settings2, Trash2, Briefcase } from "lucide-react";
 import { Card, PageHeader, btn, cx } from "./ui";
 import type { AuditAction, AuditRow } from "@/lib/types";
 
@@ -10,6 +10,7 @@ const KINDS: Record<AuditAction, { label: string; icon: React.ElementType; tone:
   screened: { label: "Screened", icon: FileSearch, tone: "bg-moss text-forest" },
   decision: { label: "Decision", icon: Gavel, tone: "bg-accept-bg text-accept" },
   deleted: { label: "Deleted", icon: Trash2, tone: "bg-reject-bg text-reject" },
+  merged: { label: "Merged", icon: GitMerge, tone: "bg-talk-bg text-talk" },
   job_created: { label: "Job saved", icon: Briefcase, tone: "bg-pending-bg text-pending" },
   gate_changed: { label: "Mandatory skills", icon: Lock, tone: "bg-talk-bg text-talk" },
   settings_changed: { label: "Settings", icon: Settings2, tone: "bg-paper-2 text-ink-soft" },
@@ -72,7 +73,7 @@ export default function ActivityLog() {
           <Download size={16} /> Export CSV
         </a>
       </PageHeader>
-      <p className="-mt-4 mb-6 max-w-2xl text-ink-soft">A record of who did what and when — screenings, decisions, mandatory-skill changes and settings. Entries can&apos;t be edited from the app.</p>
+      <p className="-mt-4 mb-6 max-w-2xl text-ink-soft">A complete record of who did what and when: screenings, decisions, mandatory-skill changes and settings updates. Entries cannot be edited from the app.</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="inline-flex flex-wrap rounded-full border border-line-strong bg-paper-2/60 p-1 text-sm" role="group" aria-label="Filter by event">
@@ -96,8 +97,14 @@ export default function ActivityLog() {
         ) : data.rows.length === 0 ? (
           <p className="px-6 py-16 text-center text-ink-soft">{key ? "Nothing matches these filters." : "Nothing has happened yet. Screen a resume and it will appear here."}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[12.5rem]" />
+                <col className="w-24" />
+                <col className="w-44" />
+                <col />
+              </colgroup>
               <thead className="border-b border-line bg-paper-2/50">
                 <tr className="eyebrow !text-[0.66rem]">
                   <th className="px-5 py-3 font-medium">When</th>

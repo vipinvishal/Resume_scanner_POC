@@ -23,7 +23,7 @@ export function Logo({ href = "/", light = false }: { href?: string; light?: boo
   return (
     <Link href={href} className="inline-flex items-center gap-2.5" aria-label="TalentLens home">
       <LogoMark />
-      <span className={cx("font-display text-[1.35rem] font-semibold leading-none", light ? "text-paper" : "text-ink")}>
+      <span className={cx("font-display text-[1.35rem] font-semibold leading-none", light ? "text-on-panel" : "text-ink")}>
         Talent<span className="italic font-normal">Lens</span>
       </span>
     </Link>

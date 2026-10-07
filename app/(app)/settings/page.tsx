@@ -20,7 +20,7 @@ const PROVIDERS: { key: Provider; label: string; desc: string }[] = [
 ];
 
 const DATABASES: { key: DbType; label: string; desc: string; port: number }[] = [
-  { key: "sqlite", label: "SQLite (built in)", desc: "A single file on this computer. No setup needed — a good starting point.", port: 0 },
+  { key: "sqlite", label: "SQLite (built in)", desc: "A single file on this computer. No setup required.", port: 0 },
   { key: "postgres", label: "PostgreSQL", desc: "Use your company's PostgreSQL server.", port: 5432 },
   { key: "mysql", label: "MySQL / MariaDB", desc: "Use your company's MySQL or MariaDB server.", port: 3306 },
   { key: "mssql", label: "SQL Server", desc: "Use your company's Microsoft SQL Server.", port: 1433 },
@@ -130,8 +130,8 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Settings" title="Set it up your way" />
-      <div className="max-w-3xl space-y-6">
+      <PageHeader eyebrow="Settings" title="Configure TalentLens" />
+      <div className="grid items-start gap-6 lg:grid-cols-2">
         {/* ───── AI model ───── */}
         <Card className="p-7">
           <h2 className="font-display flex items-center gap-2.5 text-2xl font-semibold">
@@ -282,7 +282,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* ───── Recommendation levels ───── */}
-        <Card className="p-7">
+        <Card className="p-7 lg:col-span-2">
           <h2 className="font-display text-2xl font-semibold">Recommendation levels</h2>
           <p className="mt-1 text-sm text-ink-soft">The match score decides the AI recommendation. HR can always override it.</p>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -298,7 +298,7 @@ export default function SettingsPage() {
           <p className="mt-3 text-sm text-ink-soft">Below {f.talkThreshold} → Reject · {f.talkThreshold}–{f.acceptThreshold - 1} → Talk to candidate · {f.acceptThreshold}+ → Accept</p>
         </Card>
 
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4 lg:col-span-2">
           <button onClick={save} disabled={saving} className={cx(btn.primary, "!px-8")}>
             {saving && <Loader2 size={16} className="animate-spin" />} Save settings
           </button>

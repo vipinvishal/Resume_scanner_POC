@@ -183,9 +183,9 @@ async function backfill(d: Driver) {
 }
 
 /** Local calendar days (YYYY-MM-DD) → the ISO timestamps that bound them, for the date filters. */
-function dayRange(from?: string, to?: string): { sql: string[]; params: string[] } {
+function dayRange(from?: string, to?: string): { sql: string[]; params: (string | number)[] } {
   const sql: string[] = [];
-  const params: string[] = [];
+  const params: (string | number)[] = [];
   if (from) {
     sql.push("c.created_at >= ?");
     params.push(new Date(`${from}T00:00:00`).toISOString());
@@ -358,8 +358,8 @@ const usableName = (n: string) => n.length >= 5 && n.includes(" ") && !/\.(pdf|d
 export async function findDuplicates(input: { name: string; email: string; hash: string; jobId: number; excludeId?: number }): Promise<DupRef[]> {
   const name = norm(input.name);
   const email = norm(input.email);
-  const rows = await (await db()).all<{ id: number; job_id: number; job_title: string | null; name: string; email: string; score: number; created_at: string; resume_hash: string | null }>(
-    `SELECT c.id, c.job_id, j.title AS job_title, c.name, c.email, c.score, c.created_at, c.resume_hash
+  const rows = await (await db()).all<{ id: number; job_id: number; job_title: string | null; name: string; email: string; score: number; hr_status: HrStatus; created_at: string; resume_hash: string | null }>(
+    `SELECT c.id, c.job_id, j.title AS job_title, c.name, c.email, c.score, c.hr_status, c.created_at, c.resume_hash
        FROM ${CANDS} c LEFT JOIN ${JOBS} j ON j.id = c.job_id
       WHERE c.id <> ? AND (c.resume_hash = ? OR LOWER(c.email) = ? OR LOWER(c.name) = ?)
       ORDER BY c.id DESC`,
@@ -371,6 +371,7 @@ export async function findDuplicates(input: { name: string; email: string; hash:
     job_id: Number(r.job_id),
     job_title: r.job_title ?? "",
     score: Number(r.score),
+    hr_status: r.hr_status,
     created_at: r.created_at,
     same_job: Number(r.job_id) === input.jobId,
     basis: r.resume_hash === input.hash ? ("file" as const) : email && norm(r.email) === email ? ("email" as const) : ("name" as const),
@@ -546,8 +547,48 @@ export async function deleteCandidate(id: number, actor = "system") {
   if (cur) await writeAudit(d, { actor, action: "deleted", candidateId: id, jobId: Number(cur.job_id), summary: `Deleted the record of ${cur.name}` });
 }
 
-export async function getStats(opts: { from?: string; to?: string } = {}) {
+/**
+ * Merge a duplicate record into the one being kept: the duplicate is deleted, and if the kept record has no decision yet
+ * it takes over the duplicate's decision and note, so HR's earlier work isn't lost.
+ */
+export async function mergeCandidates(keepId: number, dropId: number, actor = "system"): Promise<"ok" | "missing" | "same"> {
+  if (keepId === dropId) return "same";
+  const d = await db();
+  const get = async (id: number) =>
+    (await d.all<{ name: string; hr_status: HrStatus; note: string; decided_at: string | null; job_id: number }>(`SELECT name, hr_status, note, decided_at, job_id FROM ${CANDS} WHERE id = ?`, [id]))[0];
+  const keep = await get(keepId);
+  const drop = await get(dropId);
+  if (!keep || !drop) return "missing";
+
+  let carried = "";
+  const adopt = keep.hr_status === "pending" && drop.hr_status !== "pending";
+  const nextNote = keep.note || drop.note;
+  if (adopt || nextNote !== keep.note) {
+    const status = adopt ? drop.hr_status : keep.hr_status;
+    if (adopt) {
+      await d.insert(HIST, { candidate_id: keepId, from_status: keep.hr_status, to_status: status, note: nextNote, created_at: now() });
+      carried = `, keeping the earlier decision (${STATUS_LABEL[status]})`;
+    }
+    await d.run(`UPDATE ${CANDS} SET hr_status = ?, note = ?, decided_at = ? WHERE id = ?`, [status, nextNote, adopt ? drop.decided_at : keep.decided_at, keepId]);
+  }
+  await d.run(`DELETE FROM ${HIST} WHERE candidate_id = ?`, [dropId]);
+  await d.run(`DELETE FROM ${CANDS} WHERE id = ?`, [dropId]);
+  await writeAudit(d, {
+    actor,
+    action: "merged",
+    candidateId: keepId,
+    jobId: Number(keep.job_id),
+    summary: `Merged a duplicate record of ${drop.name} into ${keep.name}${carried}`,
+  });
+  return "ok";
+}
+
+export async function getStats(opts: { from?: string; to?: string; jobId?: number } = {}) {
   const range = dayRange(opts.from, opts.to);
+  if (opts.jobId) {
+    range.sql.push("c.job_id = ?");
+    range.params.push(opts.jobId);
+  }
   const rows = await (await db()).all<{ hr_status: HrStatus; n: number; total: number }>(
     `SELECT c.hr_status, COUNT(*) AS n, SUM(c.score) AS total FROM ${CANDS} c ${range.sql.length ? `WHERE ${range.sql.join(" AND ")}` : ""} GROUP BY c.hr_status`,
     range.params,

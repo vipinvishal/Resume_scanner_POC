@@ -21,12 +21,15 @@ export function FileDrop({
   onChange,
   title,
   hint,
+  fill = false,
 }: {
   multiple?: boolean;
   files: File[];
   onChange: (f: File[]) => void;
   title: string;
   hint?: string;
+  /** Let the drop zone take up any spare height in its card. */
+  fill?: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -44,7 +47,7 @@ export function FileDrop({
   }
 
   return (
-    <div>
+    <div className={cx(fill && "flex flex-1 flex-col")}>
       <div
         role="button"
         tabIndex={0}
@@ -59,6 +62,7 @@ export function FileDrop({
         }}
         className={cx(
           "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-6 py-9 text-center transition-all",
+          fill && "flex-1",
           over ? "scale-[1.01] border-forest bg-moss/50" : "border-line-strong bg-paper/50 hover:border-forest/60 hover:bg-card",
         )}
       >
@@ -126,7 +130,7 @@ export function JdInput({ value, onChange }: { value: JdValue; onChange: (v: JdV
           value={value.text}
           onChange={(e) => onChange({ text: e.target.value, file: null })}
           rows={11}
-          placeholder="Paste the job description from the technical team here…"
+          placeholder="Paste the full job description here…"
           className="w-full resize-y rounded-2xl border border-line-strong bg-paper/50 px-4 py-3.5 leading-relaxed outline-none transition focus:border-forest focus:bg-card focus:ring-4 focus:ring-forest/10"
         />
       ) : (
@@ -144,12 +148,4 @@ export function jdFormData(v: JdValue, title?: string): FormData {
   else fd.append("jdText", v.text);
   if (title) fd.append("title", title);
   return fd;
-}
-
-/* ───────── Sample data (for demos) ───────── */
-export async function loadSamples(which: "jd" | "resume" | "resumes"): Promise<File[]> {
-  const get = async (name: string) => new File([await (await fetch(`/samples/${name}`)).blob()], name, { type: "text/plain" });
-  if (which === "jd") return [await get("JD-Senior-Backend-Engineer.txt")];
-  if (which === "resume") return [await get("Resume-Priya-Sharma.txt")];
-  return Promise.all(["Resume-Aarav-Mehta.txt", "Resume-Priya-Sharma.txt", "Resume-Rohan-Verma.txt"].map(get));
 }

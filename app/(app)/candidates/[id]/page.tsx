@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Copy, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { getCandidate } from "@/lib/db";
 import ReportView from "@/components/report";
 import DecisionPanel, { PrintButton } from "@/components/decision";
+import DuplicatesPanel from "@/components/duplicates";
 import { StatusBadge, formatDate } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -43,24 +44,7 @@ export default async function CandidatePage(props: PageProps<"/candidates/[id]">
           </div>
         </div>
       )}
-      {c.duplicates.length > 0 && (
-        <div className="mb-6 rounded-2xl border border-talk/30 bg-talk-bg/60 px-5 py-4 text-talk">
-          <p className="flex items-center gap-2 font-semibold">
-            <Copy size={18} /> Seen before — {c.duplicates.length === 1 ? "1 other record looks" : `${c.duplicates.length} other records look`} like this person
-          </p>
-          <ul className="mt-2 space-y-1 text-sm">
-            {c.duplicates.map((d) => (
-              <li key={d.id}>
-                <Link href={`/candidates/${d.id}`} className="font-medium underline">{d.name}</Link>
-                {" — "}
-                {d.basis === "file" ? "the same resume file" : d.basis === "email" ? "same email address" : "same name (could be a different person)"}
-                {" · "}
-                {d.same_job ? "this job" : `"${d.job_title}"`} · {formatDate(d.created_at)} · match {d.score}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {c.duplicates.length > 0 && <DuplicatesPanel id={c.id} name={c.name} duplicates={c.duplicates.map((d) => ({ ...d, when: formatDate(d.created_at) }))} />}
       <div className="grid items-start gap-8 xl:grid-cols-[1fr_330px]">
         <div className="min-w-0">
           <ReportView report={c.report} jobTitle={c.job_title} fileName={c.file_name} mandatoryIds={c.mandatory_ids} />

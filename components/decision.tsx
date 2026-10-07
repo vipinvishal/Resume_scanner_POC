@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, MessageCircleQuestion, Printer, RotateCcw, Send, XCircle } from "lucide-react";
 import type { HrStatus, Verdict } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
 import { StatusBadge, VerdictBadge, btn, cx, formatDate } from "./ui";
+
+const noSubscribe = () => () => {};
+/** A timestamp in the viewer's own locale. It renders empty on the server so the two can never disagree, then fills in. */
+function LocalTime({ iso }: { iso: string }) {
+  return useSyncExternalStore(noSubscribe, () => formatDate(iso), () => "");
+}
 
 interface Hist {
   id: number;
@@ -18,9 +24,9 @@ interface Hist {
 type Choice = Exclude<HrStatus, "pending">;
 
 const OPTIONS: { status: Choice; label: string; sub: string; icon: React.ElementType; on: string; ring: string }[] = [
-  { status: "accepted", label: "Accept", sub: "Proceed to L1 / L2", icon: CheckCircle2, on: "bg-accept text-white", ring: "hover:border-accept/60 hover:bg-accept-bg/50" },
-  { status: "talk", label: "Talk to candidate", sub: "HR call first", icon: MessageCircleQuestion, on: "bg-talk text-white", ring: "hover:border-talk/60 hover:bg-talk-bg/50" },
-  { status: "rejected", label: "Reject", sub: "Close with a reason", icon: XCircle, on: "bg-reject text-white", ring: "hover:border-reject/60 hover:bg-reject-bg/50" },
+  { status: "accepted", label: "Accept", sub: "Proceed to L1 / L2", icon: CheckCircle2, on: "bg-accept text-on-solid", ring: "hover:border-accept/60 hover:bg-accept-bg/50" },
+  { status: "talk", label: "Talk to candidate", sub: "HR call first", icon: MessageCircleQuestion, on: "bg-talk text-on-solid", ring: "hover:border-talk/60 hover:bg-talk-bg/50" },
+  { status: "rejected", label: "Reject", sub: "Close with a reason", icon: XCircle, on: "bg-reject text-on-solid", ring: "hover:border-reject/60 hover:bg-reject-bg/50" },
 ];
 
 export function PrintButton() {
@@ -129,7 +135,7 @@ export default function DecisionPanel({
                 <o.icon size={20} />
                 <span>
                   <span className="block text-sm font-semibold leading-tight">{o.label}</span>
-                  <span className={cx("text-xs", active ? "text-white/80" : "text-ink-soft")}>{o.sub}</span>
+                  <span className={cx("text-xs", active ? "text-on-solid/80" : "text-ink-soft")}>{o.sub}</span>
                 </span>
               </button>
             );
@@ -156,7 +162,7 @@ export default function DecisionPanel({
           {busy ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
           {busy ? "Submitting…" : "Submit decision"}
         </button>
-        {!choice && !done && <p className="mt-2 text-center text-xs text-ink-soft">Choose an option above, add a note if you like, then submit.</p>}
+        {!choice && !done && <p className="mt-2 text-center text-xs text-ink-soft">Select a decision, add an optional note, then submit.</p>}
         {done && (
           <p role="status" className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-accept-bg px-3.5 py-2 text-sm font-medium text-accept">
             <CheckCircle2 size={16} /> {done}
@@ -180,7 +186,7 @@ export default function DecisionPanel({
                 <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-forest" />
                 <p className="text-sm font-medium">{STATUS_LABEL[h.to_status as HrStatus] ?? h.to_status}</p>
                 {h.note && <p className="text-sm text-ink-soft">“{h.note}”</p>}
-                <p className="font-mono text-xs text-ink-faint">{formatDate(h.created_at)}</p>
+                <p className="font-mono text-xs text-ink-faint"><LocalTime iso={h.created_at} /></p>
               </li>
             ))}
           </ol>

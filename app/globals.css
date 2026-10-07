@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` follows the theme switch (data-theme on <html>), not just the operating system setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* ───────────────────────────────────────────────
    TalentLens design tokens — "ink & paper"
    ─────────────────────────────────────────────── */
@@ -7,15 +10,15 @@
   --color-paper: #f5f0e6;
   --color-paper-2: #ece5d4;
   --color-card: #fbf8f1;
-  --color-ink: #17231d;
-  --color-ink-soft: #56635b;
-  --color-ink-faint: #8a948c;
+  --color-ink: #141414;
+  --color-ink-soft: #5b5b57;
+  --color-ink-faint: #8d8c87;
   --color-line: #ddd5c1;
   --color-line-strong: #c6bda5;
 
-  --color-forest: #1e4a38;
-  --color-forest-deep: #12301f;
-  --color-moss: #dfe9d6;
+  --color-forest: #141414;
+  --color-forest-deep: #000000;
+  --color-moss: #e7e3d7;
 
   --color-accept: #2c7a55;
   --color-accept-bg: #dcefe3;
@@ -26,17 +29,33 @@
   --color-pending: #5b6b8c;
   --color-pending-bg: #e1e6f0;
 
+  /* Text on solid status colours (accept / talk / reject), and big brand panels with their text. */
+  --color-on-solid: #ffffff;
+  --color-panel: #1b1b1b;
+  --color-panel-deep: #0f0f0f;
+  --color-on-panel: #f5f0e6;
+  --color-mint: #d9d5c9;
+
   --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
   --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
-  --shadow-soft: 0 1px 0 rgb(23 35 29 / 0.04), 0 8px 24px -12px rgb(23 35 29 / 0.18);
-  --shadow-lift: 0 1px 0 rgb(23 35 29 / 0.05), 0 24px 48px -20px rgb(23 35 29 / 0.28);
+  --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.18);
+  --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.05), 0 24px 48px -20px rgb(0 0 0 / 0.28);
 
   --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-fade: fade 0.6s ease both;
   --animate-float: float 7s ease-in-out infinite;
   --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-page: page-in 0.38s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  --animate-tab: page-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  --animate-row: row-in 0.3s ease-out backwards;
+  --animate-pop: pop 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-fade-quick: fade 0.18s ease-out backwards;
+  --animate-spin-slow: spin-slow 3.6s linear infinite;
+  --animate-halo: halo 2.6s ease-out infinite;
+  --animate-bob: bob 3.4s ease-in-out infinite;
+  --animate-twinkle: twinkle 2.4s ease-in-out infinite;
 
   @keyframes rise {
     from { opacity: 0; transform: translateY(18px); }
@@ -54,12 +73,80 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
+  /* "backwards" fill only: once finished nothing is left applied, so fixed pop-ups and sticky panels inside behave normally. */
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(10px); }
+  }
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(4px); }
+  }
+  @keyframes spin-slow {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes halo {
+    0% { transform: scale(1); opacity: 0.45; }
+    75%, 100% { transform: scale(1.75); opacity: 0; }
+  }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+  @keyframes twinkle {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.18) rotate(14deg); }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  }
+}
+
+/* ───────────────────────────────────────────────
+   Dark theme — same names, different values.
+   Screen only: printed reports always use the light colours.
+   ─────────────────────────────────────────────── */
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-paper: #0a0a0a;
+    --color-paper-2: #121212;
+    --color-card: #161616;
+    --color-ink: #f0f0ee;
+    --color-ink-soft: #a6a6a1;
+    --color-ink-faint: #77776f;
+    --color-line: #262626;
+    --color-line-strong: #373737;
+
+    --color-forest: #f0f0ee;
+    --color-forest-deep: #ffffff;
+    --color-moss: #222222;
+
+    --color-accept: #55c28f;
+    --color-accept-bg: #163a2a;
+    --color-talk: #e3a93f;
+    --color-talk-bg: #3b2f12;
+    --color-reject: #f27f6b;
+    --color-reject-bg: #43211b;
+    --color-pending: #9fb0d6;
+    --color-pending-bg: #232d44;
+
+    --color-on-solid: #0a0a0a;
+    --color-panel: #1c1c1c;
+    --color-panel-deep: #141414;
+    --color-on-panel: #f0f0ee;
+    --color-mint: #cfcfca;
+
+    --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.35), 0 24px 48px -20px rgb(0 0 0 / 0.75);
+  }
 }
 
 html {
   background: var(--color-paper);
   color: var(--color-ink);
   scroll-behavior: smooth;
+  /* Keep the scrollbar's space reserved so short and long pages don't shift sideways. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -68,7 +155,24 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   /* faint paper grain */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09  0 0 0 0 0.14  0 0 0 0 0.11  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09  0 0 0 0 0.09  0 0 0 0 0.09  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Buttons, links and fields ease between states everywhere. Classes like `transition-all` still win (this is the base layer). */
+@layer base {
+  a, button, summary, input, select, textarea, [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 0.2s;
+    transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+
+/* While the theme is being switched, every colour eases to its new value instead of snapping. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, fill 0.4s ease, stroke 0.4s ease, box-shadow 0.4s ease !important;
 }
 
 ::selection {
@@ -125,6 +229,14 @@ body {
 /* ───── Chart colours (checked with the data-viz palette validator) ─────
    Outcome colours reuse the app's accept / talk / reject meaning. They are stacked in the order
    accepted → talk → pending → rejected so red and amber never touch; "pending" is a deliberate neutral. */
+@media screen {
+  :root[data-theme="dark"] .viz {
+    --viz-accepted: #3fbf86;
+    --viz-talk: #e0a02a;
+    --viz-pending: #8797bb;
+    --viz-rejected: #ef6a5a;
+  }
+}
 .viz {
   --viz-accepted: #16895a;
   --viz-talk: #d08a0a;

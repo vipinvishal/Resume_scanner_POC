@@ -33,7 +33,9 @@ export async function POST(req: Request) {
     }
 
     const report = await analyzeResume(job.requirements, text, file.name, s);
-    const gate = gateMissing(job.requirements.requirements, report.skills);
+    // The analysis takes a while and HR may change the mandatory skills meanwhile, so check against the job as it is now.
+    const latest = (await getJob(jobId)) ?? job;
+    const gate = gateMissing(latest.requirements.requirements, report.skills);
     const id = await insertCandidate({
       jobId,
       fileName: file.name,

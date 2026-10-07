@@ -127,6 +127,7 @@ export interface DupRef {
   job_id: number;
   job_title: string;
   score: number;
+  hr_status: HrStatus;
   created_at: string;
   same_job: boolean;
   basis: "file" | "email" | "name";
@@ -140,7 +141,7 @@ export interface CandidateDetail extends CandidateRow {
   mandatory_ids: string[];
 }
 
-export type AuditAction = "screened" | "decision" | "deleted" | "job_created" | "gate_changed" | "settings_changed";
+export type AuditAction = "screened" | "decision" | "deleted" | "merged" | "job_created" | "gate_changed" | "settings_changed";
 
 export interface AuditRow {
   id: number;

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, LogOut, Settings, TriangleAlert, Users } from "lucide-react";
 import type { Provider } from "@/lib/types";
 import { Logo, cx } from "./ui";
+import ThemeToggle from "./theme-toggle";
+import Chatbot from "./chatbot";
 
 const ENGINE_NAME: Record<Provider, string> = { openai: "OpenAI", anthropic: "Anthropic", gemini: "Gemini", ollama: "Ollama" };
 
@@ -73,6 +75,7 @@ export default function Shell({
               <span className="font-semibold text-ink">{ENGINE_NAME[provider]}</span>
               <span className="max-w-[9rem] truncate font-mono">{configured ? model : "not set up"}</span>
             </Link>
+            <ThemeToggle />
             <button onClick={signOut} className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-ink-soft transition-colors hover:bg-card hover:text-ink">
               <LogOut size={16} />
               <span className="hidden sm:inline">Sign out</span>
@@ -81,7 +84,8 @@ export default function Shell({
         </div>
       </header>
 
-      <main className="app-shell-main mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:py-10">{children}</main>
+      <main className="app-shell-main mx-auto w-full max-w-7xl px-5 pb-24 pt-8 sm:px-8 lg:pt-10">{children}</main>
+      <Chatbot />
     </div>
   );
 }

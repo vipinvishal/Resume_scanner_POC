@@ -14,13 +14,12 @@ import {
   MessageCircleQuestion,
   RotateCcw,
   ShieldAlert,
-  Trash2,
-  Wand2,
   X,
   XCircle,
   Zap,
 } from "lucide-react";
-import { FileDrop, JdInput, jdFormData, jdReady, loadSamples, type JdValue } from "./inputs";
+import { ConfirmDialog } from "./confirm";
+import { FileDrop, JdInput, jdFormData, jdReady, type JdValue } from "./inputs";
 import { Card, VerdictBadge, btn, cx } from "./ui";
 import { gateMissing } from "@/lib/gate";
 import type { CandidateRow, DupRef, HrStatus, JobRow, Report } from "@/lib/types";
@@ -56,15 +55,24 @@ type Sort = "score_desc" | "score_asc" | "name" | "recent";
 
 const LAST_JOB = "talentlens.job";
 
+/** Remember the open job for this session and tell the assistant which job HR is looking at. */
+function rememberJob(id: number | null) {
+  try {
+    if (id) sessionStorage.setItem(LAST_JOB, String(id));
+    else sessionStorage.removeItem(LAST_JOB);
+  } catch {}
+  window.dispatchEvent(new Event("talentlens:job"));
+}
+
 const DECISIONS = [
-  { status: "accepted", icon: CheckCircle2, label: "Accept — move to L1/L2", short: "Accept", on: "border-accept bg-accept text-white", hover: "hover:border-accept/50 hover:bg-accept-bg hover:text-accept" },
-  { status: "talk", icon: MessageCircleQuestion, label: "Talk to candidate first", short: "Talk", on: "border-talk bg-talk text-white", hover: "hover:border-talk/50 hover:bg-talk-bg hover:text-talk" },
-  { status: "rejected", icon: XCircle, label: "Reject", short: "Reject", on: "border-reject bg-reject text-white", hover: "hover:border-reject/50 hover:bg-reject-bg hover:text-reject" },
+  { status: "accepted", icon: CheckCircle2, label: "Accept — move to L1/L2", short: "Accept", on: "border-accept bg-accept text-on-solid", hover: "hover:border-accept/50 hover:bg-accept-bg hover:text-accept" },
+  { status: "talk", icon: MessageCircleQuestion, label: "Talk to candidate first", short: "Talk", on: "border-talk bg-talk text-on-solid", hover: "hover:border-talk/50 hover:bg-talk-bg hover:text-talk" },
+  { status: "rejected", icon: XCircle, label: "Reject", short: "Reject", on: "border-reject bg-reject text-on-solid", hover: "hover:border-reject/50 hover:bg-reject-bg hover:text-reject" },
 ] as const;
 
 // One grid for the header and every row so the columns line up. Skills and "Full report" only show on wide screens.
 const GRID =
-  "md:grid-cols-[1.5rem_minmax(0,1fr)_4rem_9.5rem_16rem] xl:grid-cols-[1.5rem_minmax(0,1.1fr)_4rem_9.5rem_minmax(0,1.2fr)_16rem_7rem]";
+  "md:grid-cols-[1.5rem_minmax(0,1fr)_4rem_9.5rem_16rem_2rem] xl:grid-cols-[1.5rem_minmax(0,1.1fr)_4rem_9.5rem_minmax(0,1.2fr)_16rem_9rem]";
 
 const field =
   "w-full cursor-pointer appearance-none rounded-xl border border-line-strong bg-paper/50 py-2.5 pl-4 pr-10 outline-none transition focus:border-forest focus:bg-card focus:ring-4 focus:ring-forest/10";
@@ -119,13 +127,18 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [decisionFilter, setDecisionFilter] = useState<HrStatus | "all">("all");
   const [sort, setSort] = useState<Sort>("score_desc");
+  const [toDelete, setToDelete] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const cancelled = useRef(false);
   const uid = useRef(0);
 
+  // Numbers follow the selected job; with no job selected they cover everything.
+  const jobId = job?.id;
   const loadStats = useCallback(() => {
-    fetch("/api/stats").then((r) => r.json()).then((d) => typeof d.total === "number" && setStats(d)).catch(() => {});
-  }, []);
+    fetch(jobId ? `/api/stats?jobId=${jobId}` : "/api/stats").then((r) => r.json()).then((d) => typeof d.total === "number" && setStats(d)).catch(() => {});
+  }, [jobId]);
 
   const loadSavedJobs = useCallback(async (): Promise<SavedJob[]> => {
     try {
@@ -148,7 +161,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         report: c.report!,
         hr: c.hr_status,
         dups: c.dup_count,
-        dupTip: c.dup_count ? `Looks like ${c.dup_count} other record${c.dup_count === 1 ? "" : "s"} of the same person — open the full report to see them.` : "",
+        dupTip: c.dup_count ? `Looks like ${c.dup_count} other record${c.dup_count === 1 ? "" : "s"} of the same person.` : "",
         created: c.created_at,
       },
     }),
@@ -169,9 +182,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         setJob(j);
         setRows(list.map(toRow));
         setNotices([]);
-        try {
-          sessionStorage.setItem(LAST_JOB, String(id));
-        } catch {}
+        rememberJob(id);
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -183,7 +194,6 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
 
   // On arrival: numbers, the saved-jobs list, and the job HR was last working on.
   useEffect(() => {
-    loadStats();
     void (async () => {
       const list = await loadSavedJobs();
       try {
@@ -191,7 +201,12 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         if (last && list.some((j) => j.id === last)) await openJob(last);
       } catch {}
     })();
-  }, [loadStats, loadSavedJobs, openJob]);
+  }, [loadSavedJobs, openJob]);
+
+  // Refresh the numbers on arrival and whenever the selected job changes.
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   const ready = jdReady(jd) && files.length > 0;
   const readyWithJob = !!job && files.length > 0;
@@ -206,19 +221,8 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       setJob(null);
       setRows([]);
       setNotices([]);
-      try {
-        sessionStorage.removeItem(LAST_JOB);
-      } catch {}
+      rememberJob(null);
     } else void openJob(Number(value));
-  }
-
-  async function useSamples() {
-    setJob(null);
-    setRows([]);
-    setNotices([]);
-    const [j] = await loadSamples("jd");
-    setJd({ text: "", file: j });
-    setFiles(await loadSamples("resumes"));
   }
 
   async function analyzeOne(row: Row, jobId: number) {
@@ -271,9 +275,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           keep = Array.isArray(cr) ? cr.map(toRow) : [];
           setNotices(["This job description was already saved — using the saved job and its shortlist."]);
         }
-        try {
-          sessionStorage.setItem(LAST_JOB, String(j.id));
-        } catch {}
+        rememberJob(j.id);
         void loadSavedJobs();
         setJd({ text: "", file: null });
       } catch (e) {
@@ -314,6 +316,25 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     if (res.ok) {
       patch(row.uid, { ...row.res, hr: status });
       loadStats();
+    }
+  }
+
+  async function confirmDelete() {
+    const row = toDelete;
+    if (!row || row.res.state !== "done") return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/candidates/${row.res.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't delete that entry.");
+      setRows((rs) => rs.filter((r) => r.uid !== row.uid));
+      setToDelete(null);
+      loadStats();
+      void loadSavedJobs();
+    } catch (e) {
+      setDeleteError((e as Error).message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -378,8 +399,8 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
   const filtered = verdictFilter !== "all" || decisionFilter !== "all";
 
   const kpis = [
-    { k: "Resumes screened", v: stats?.total, sub: "All time" },
-    { k: "Average match", v: stats ? `${stats.avgScore}%` : undefined, sub: "Across all candidates" },
+    { k: "Resumes screened", v: stats?.total, sub: job ? "For this job" : "All time" },
+    { k: "Average match", v: stats ? `${stats.avgScore}%` : undefined, sub: job ? "Across this job's candidates" : "Across all candidates" },
     { k: "Accepted", v: stats?.accepted, sub: "Moving to L1 / L2", tone: "text-accept" },
     { k: "Waiting for your decision", v: stats?.pending, sub: "Open the Candidates tab", tone: "text-pending" },
   ];
@@ -400,16 +421,13 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       {/* ── Title ── */}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold leading-tight sm:text-4xl">Screen resumes</h1>
-          <p className="mt-1 text-ink-soft">Pick or add a job description, add one or many resumes, then press Screen.</p>
+          <h1 className="font-display text-3xl font-semibold leading-tight sm:text-4xl">AI-powered Candidate Screening</h1>
+          <p className="mt-1 text-ink-soft">Select or add a job description, upload one or more resumes, then click Screen.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={useSamples} disabled={running} className={btn.ghost}>
-            <Wand2 size={16} /> Try with sample data
-          </button>
           {(rows.length > 0 || !!job || jdReady(jd) || files.length > 0) && (
             <button onClick={startOver} disabled={running} className={btn.quiet}>
-              <Trash2 size={15} /> Start over
+              <RotateCcw size={15} /> Start over
             </button>
           )}
         </div>
@@ -423,6 +441,27 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           </p>
           <ChevronRight size={18} />
         </Link>
+      )}
+
+      {/* ── Job filter: pick a JD and the page shows the resumes screened for it ── */}
+      {(savedJobs.length > 0 || job) && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-line bg-card px-5 py-4 shadow-soft">
+          <label htmlFor="savedjob" className="text-sm font-medium">
+            Show resumes for job description
+          </label>
+          <div className="relative min-w-0 flex-1 basis-72">
+            <select id="savedjob" value={job ? String(job.id) : "new"} onChange={(e) => pickJob(e.target.value)} disabled={running || loadingJob} className={field}>
+              <option value="new">＋ New job description</option>
+              {savedJobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.title} · {j.candidates} candidate{j.candidates === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={18} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
+          </div>
+          {loadingJob && <Loader2 size={18} className="animate-spin text-forest" />}
+        </div>
       )}
 
       {/* ── Numbers ── */}
@@ -441,27 +480,10 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         <Card className="p-6">
           <Step n={1}>Job description</Step>
 
-          {(savedJobs.length > 0 || job) && (
-            <div className="mb-4">
-              <label htmlFor="savedjob" className="mb-1.5 block text-sm font-medium">Saved jobs</label>
-              <div className="relative">
-                <select id="savedjob" value={job ? String(job.id) : "new"} onChange={(e) => pickJob(e.target.value)} disabled={running || loadingJob} className={field}>
-                  <option value="new">＋ New job description</option>
-                  {savedJobs.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.title} · {j.candidates} candidate{j.candidates === 1 ? "" : "s"}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={18} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
-              </div>
-            </div>
-          )}
-
           {loadingJob ? (
             <div className="skeleton h-40 rounded-xl" />
           ) : job ? (
-            <div>
+            <div key={job.id} className="animate-tab">
               <p className="font-display text-xl font-semibold leading-snug">{job.title}</p>
               {job.requirements.summary && <p className="mt-1 text-sm text-ink-soft">{job.requirements.summary}</p>}
               <p className="mt-1 text-xs text-ink-faint">
@@ -470,10 +492,13 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
 
               <div className="mt-4 rounded-xl border border-line bg-paper/40 p-4">
                 <p className="flex items-center gap-2 text-sm font-medium">
-                  <Lock size={14} className="text-forest" /> Mandatory skills
+                  <Lock size={14} className="text-forest" /> Make a skill mandatory
+                  <span className={cx("rounded-full px-2 py-0.5 text-xs font-semibold", mandatoryCount ? "bg-forest text-paper" : "bg-paper-2 text-ink-soft")}>
+                    {mandatoryCount ? `${mandatoryCount} selected` : "None selected"}
+                  </span>
                 </p>
                 <p className="mt-1 text-xs text-ink-soft">
-                  Click a skill to make it <b>mandatory</b>. Anyone whose resume lacks a mandatory skill is flagged <b>Not eligible</b>, whatever their score.
+                  Click any skill below to require it. Candidates whose resume lacks a mandatory skill are flagged <b>Not eligible</b>, whatever their score.
                 </p>
                 {[
                   ["Must-have", mustList],
@@ -513,7 +538,15 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
               </details>
             </div>
           ) : (
-            <JdInput value={jd} onChange={setJd} />
+            <>
+              <JdInput value={jd} onChange={setJd} />
+              <p className="mt-3 flex items-start gap-2 rounded-xl bg-moss/50 px-3.5 py-2.5 text-sm text-ink-soft">
+                <Lock size={15} className="mt-0.5 shrink-0 text-forest" />
+                <span>
+                  <b className="text-ink">Tip:</b> once the job is read, you can make any skill <b className="text-ink">mandatory</b>. Candidates who lack one are flagged Not eligible.
+                </span>
+              </p>
+            </>
           )}
         </Card>
 
@@ -521,7 +554,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           <Step n={2}>
             Resumes {files.length > 0 && <span className="font-sans text-base font-normal text-ink-soft">({files.length})</span>}
           </Step>
-          <FileDrop multiple files={files} onChange={setFiles} title="Drop resumes here, or click to browse" hint="One or many at once · PDF, DOCX or TXT" />
+          <FileDrop multiple fill files={files} onChange={setFiles} title="Drop resumes here, or click to browse" hint="One or many at once · PDF, DOCX or TXT" />
 
           {error && (
             <div role="alert" className="mt-4 flex items-start gap-3 rounded-xl border border-reject/30 bg-reject-bg/70 px-4 py-3 text-reject">
@@ -543,7 +576,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
               )}
             </button>
             {!(job ? readyWithJob : ready) && !running && (
-              <p className="mt-2 text-center text-sm text-ink-soft">{!job && !jdReady(jd) ? "Pick a saved job or add a job description first." : "Add at least one resume."}</p>
+              <p className="mt-2 text-center text-sm text-ink-soft">{!job && !jdReady(jd) ? "Select a saved job or add a job description to begin." : "Add at least one resume to continue."}</p>
             )}
           </div>
         </Card>
@@ -569,7 +602,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           <div className="rounded-2xl border border-dashed border-line-strong bg-paper-2/30 px-6 py-10 text-center">
             <p className="font-display text-2xl font-semibold">{job ? "No one has been screened for this job yet" : "Your ranked shortlist will appear here"}</p>
             <p className="mx-auto mt-1 max-w-xl text-ink-soft">
-              {job ? "Add resumes above and press Screen." : "Best match first, with a clear suggestion for each person. You make the final call with one click."}
+              {job ? "Add resumes above and press Screen." : "Candidates are ranked best match first, each with a clear recommendation. You make the final call in one click."}
             </p>
           </div>
         ) : (
@@ -608,7 +641,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                       key={p.key}
                       onClick={() => setVerdictFilter(p.key)}
                       aria-pressed={verdictFilter === p.key}
-                      className={cx("rounded-full px-3 py-1 font-medium transition-colors", verdictFilter === p.key ? (p.key === "ineligible" ? "bg-reject text-white" : "bg-forest text-paper") : "text-ink-soft hover:text-ink")}
+                      className={cx("rounded-full px-3 py-1 font-medium transition-colors", verdictFilter === p.key ? (p.key === "ineligible" ? "bg-reject text-on-solid" : "bg-forest text-paper") : "text-ink-soft hover:text-ink")}
                     >
                       {p.label} <span className="font-mono text-xs opacity-70">{verdictCounts[p.key]}</span>
                     </button>
@@ -647,7 +680,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
               <span>AI suggests</span>
               <span className="hidden xl:block">Key skills</span>
               <span>Your decision</span>
-              <span className="hidden xl:block" />
+              <span />
             </div>
 
             <ul className="divide-y divide-line">
@@ -662,7 +695,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
               {ordered.map((r, rank) => {
                 const missing = missingOf(r);
                 return (
-                  <li key={r.uid} className={cx("grid items-center gap-x-5 gap-y-3 px-5 py-4", GRID, missing.length > 0 && "bg-reject-bg/20")}>
+                  <li key={r.uid} className={cx("animate-row grid items-center gap-x-5 gap-y-3 px-5 py-4", GRID, missing.length > 0 && "bg-reject-bg/20")}>
                     <span className="font-display hidden text-xl font-semibold text-ink-faint md:block">
                       {!running && r.res.state === "done" && sort === "score_desc" && !filtered ? rank + 1 : ""}
                     </span>
@@ -675,19 +708,19 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                             <p className="truncate text-sm text-ink-soft">{r.res.report.candidate.currentRole || r.name}</p>
                           </Link>
                           {r.res.dups > 0 && (
-                            <span title={r.res.dupTip} className="mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk">
+                            <Link href={`/candidates/${r.res.id}#duplicates`} title={`${r.res.dupTip} Click to review or merge them.`} className="mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk hover:bg-talk/15">
                               <Copy size={11} /> Seen before
-                            </span>
+                            </Link>
                           )}
                         </div>
                         <ScorePill score={r.res.report.score} verdict={r.res.report.verdict} />
-                        <div className="min-w-0 justify-self-start">
+                        <div className="min-w-0">
                           {missing.length ? (
                             <>
-                              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-reject px-2.5 py-1 text-xs font-semibold text-white">
+                              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-reject px-2.5 py-1 text-xs font-semibold text-on-solid">
                                 <ShieldAlert size={13} /> Not eligible
                               </span>
-                              <p className="mt-1 truncate text-xs text-reject" title={`Missing mandatory: ${missing.join(", ")}`}>
+                              <p className="mt-1 line-clamp-2 break-words text-xs leading-snug text-reject" title={`Missing mandatory: ${missing.join(", ")}`}>
                                 Missing: {missing.join(", ")}
                               </p>
                             </>
@@ -718,9 +751,20 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                             );
                           })}
                         </div>
-                        <Link href={`/candidates/${r.res.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-forest hover:underline md:hidden xl:inline-flex">
-                          Full report <ChevronRight size={15} />
-                        </Link>
+                        <div className="flex items-center justify-between gap-2 md:justify-end">
+                          <Link href={`/candidates/${r.res.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-forest hover:underline md:hidden xl:inline-flex">
+                            Full report <ChevronRight size={15} />
+                          </Link>
+                          <button
+                            onClick={() => (setDeleteError(""), setToDelete(r))}
+                            disabled={running}
+                            aria-label={`Delete ${r.res.report.candidate.name}`}
+                            title="Delete this entry"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-faint transition-colors hover:bg-reject-bg hover:text-reject disabled:opacity-40"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <>
@@ -750,6 +794,17 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           </Card>
         )}
       </section>
+
+      {toDelete && toDelete.res.state === "done" && (
+        <ConfirmDialog
+          title="Delete this entry?"
+          message={`Do you want "${toDelete.res.report.candidate.name}" to be deleted permanently? This removes the candidate and their screening report from the database and can't be undone.`}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
     </>
   );
 }

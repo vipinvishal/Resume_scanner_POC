@@ -106,7 +106,7 @@ export function WeeklyChart({ weeks }: { weeks: DashboardWeek[] }) {
       </div>
 
       {table ? (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[480px] text-left text-sm">
             <thead>
               <tr className="eyebrow !text-[0.66rem]">

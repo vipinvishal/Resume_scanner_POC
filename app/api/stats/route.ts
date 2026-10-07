@@ -7,7 +7,8 @@ export async function GET(req: Request) {
   if (g) return g;
   const u = new URL(req.url);
   try {
-    return Response.json(await getStats({ from: u.searchParams.get("from") || undefined, to: u.searchParams.get("to") || undefined }));
+    const jobId = Number(u.searchParams.get("jobId")) || undefined;
+    return Response.json(await getStats({ from: u.searchParams.get("from") || undefined, to: u.searchParams.get("to") || undefined, jobId }));
   } catch (e) {
     return fail(e);
   }

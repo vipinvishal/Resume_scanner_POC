@@ -65,7 +65,7 @@ export default function Overview() {
   const refreshing = !!loaded && loaded.jobId !== jobId; // keep the old charts on screen, dimmed, while new numbers load
 
   const delta = d ? d.thisWeek - d.lastWeek : 0;
-  const deltaText = !d ? "" : d.lastWeek === 0 && d.thisWeek === 0 ? "None in the last two weeks" : d.lastWeek === 0 ? "None the week before" : delta === 0 ? "Same as last week" : `${delta > 0 ? "+" : "−"}${Math.abs(delta)} vs last week`;
+  const deltaText = !d ? "" : d.lastWeek === 0 && d.thisWeek === 0 ? "No screenings in the last two weeks" : d.lastWeek === 0 ? "No screenings the week before" : delta === 0 ? "Same as last week" : `${delta > 0 ? "+" : "−"}${Math.abs(delta)} vs last week`;
 
   return (
     <>
@@ -99,27 +99,27 @@ export default function Overview() {
         !error && <div className="skeleton h-96 rounded-2xl" />
       ) : d.screened === 0 ? (
         <Card className="px-6 py-16 text-center">
-          <p className="font-display text-2xl font-semibold">Nothing to chart yet</p>
-          <p className="mt-1 text-ink-soft">Screen a few resumes on the Home tab and the charts will fill in.</p>
+          <p className="font-display text-2xl font-semibold">No data to chart yet</p>
+          <p className="mt-1 text-ink-soft">Screen a few resumes from the Home tab to populate these charts.</p>
         </Card>
       ) : (
         <div className={cx("space-y-6 transition-opacity", refreshing && "opacity-50")}>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Tile label="Screened this week" value={d.thisWeek} sub={deltaText} />
             <Tile label="Accept rate" value={d.acceptRate == null ? "–" : `${d.acceptRate}%`} sub={d.decided ? `${d.accepted} of ${d.decided} decided` : "No decisions yet"} tone="text-accept" />
-            <Tile label="Average time to decision" value={d.avgHours == null ? "–" : fmtDuration(d.avgHours)} sub="From screening to your decision" />
+            <Tile label="Average time to decision" value={d.avgHours == null ? "–" : fmtDuration(d.avgHours)} sub="From screening to final decision" />
             <Tile label="Waiting for a decision" value={d.pending} sub={`of ${d.screened} screened`} tone="text-pending" />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            <ChartCard className="lg:col-span-2" title="Screened per week" sub={`Last 8 weeks, split by what happened to each candidate`}>
+            <ChartCard className="lg:col-span-2" title="Screened per week" sub="Last 8 weeks, by outcome">
               <WeeklyChart weeks={d.weeks} />
             </ChartCard>
             <ChartCard title="Where everyone stands" sub={`All ${d.screened} screened`}>
               <OutcomeBars counts={{ accepted: d.accepted, talk: d.talk, pending: d.pending, rejected: d.rejected }} />
             </ChartCard>
 
-            <ChartCard className="lg:col-span-2" title="Time to decision" sub="Average time from screening to your latest decision, by the week the candidate was screened">
+            <ChartCard className="lg:col-span-2" title="Time to decision" sub="Average time from screening to final decision, by week screened">
               <HoursChart weeks={d.weeks} />
             </ChartCard>
             <ChartCard title="Eligibility" sub="Mandatory skills check">

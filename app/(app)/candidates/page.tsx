@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Copy, Download, ListChecks, Search, ShieldAlert, Users, Zap } from "lucide-react";
+import { BarChart3, Copy, Download, ListChecks, Search, ShieldAlert, Users, X, Zap } from "lucide-react";
 import type { CandidateRow, HrStatus } from "@/lib/types";
 import ActivityLog from "@/components/activity";
+import { ConfirmDialog } from "@/components/confirm";
 import Overview from "@/components/overview";
 import { Card, PageHeader, StatusBadge, VerdictBadge, btn, cx, formatDate } from "@/components/ui";
 
@@ -52,7 +53,11 @@ function CandidatesList() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState("");
-  const [onlyIneligible, setOnlyIneligible] = useState(false);
+  const [toDelete, setToDelete] = useState<CandidateRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [loadedKey, setLoadedKey] = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 250);
@@ -88,27 +93,48 @@ function CandidatesList() {
     let live = true;
     Promise.all([
       fetch(`/api/candidates?${listParams}`).then((r) => r.json()),
-      fetch(`/api/stats?${dateParams}`).then((r) => r.json()),
+      fetch("/api/stats").then((r) => r.json()), // everyone, ignoring filters: only tells "no candidates yet" from "none match"
     ]).then(([list, st]) => {
       if (!live) return;
       // A broken database connection comes back as { error } instead of a list.
       setError(Array.isArray(list) ? "" : (list?.error ?? "Couldn't load candidates."));
       setRows(Array.isArray(list) ? list : []);
       setStats(st?.error ? null : st);
+      setLoadedKey(`${listParams}|${reload}`);
     });
     return () => {
       live = false;
     };
-  }, [listParams, dateParams]);
+  }, [listParams, reload]);
 
-  const shown = rows && onlyIneligible ? rows.filter((r) => r.gate_missing.length > 0) : rows;
+  const shown = rows;
+  const loading = loadedKey !== `${listParams}|${reload}`; // what is on screen is from an older filter
 
+  async function confirmDelete() {
+    if (!toDelete) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/candidates/${toDelete.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't delete that entry.");
+      setToDelete(null);
+      setReload((n) => n + 1);
+      fetch("/api/jobs").then((r) => r.json()).then(setJobs).catch(() => {});
+    } catch (e) {
+      setDeleteError((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // The boxes count exactly what the list below shows, so every filter (status, date, job, search) moves them.
+  const count = (st: HrStatus) => rows?.filter((r) => r.hr_status === st).length;
   const cards = [
-    { k: "Screened", v: stats?.total, tone: "text-ink", bar: "bg-ink" },
-    { k: "Accepted", v: stats?.accepted, tone: "text-accept", bar: "bg-accept" },
-    { k: "Talk to candidate", v: stats?.talk, tone: "text-talk", bar: "bg-talk" },
-    { k: "Rejected", v: stats?.rejected, tone: "text-reject", bar: "bg-reject" },
-    { k: "Pending review", v: stats?.pending, tone: "text-pending", bar: "bg-pending" },
+    { k: "Screened", v: rows?.length, tone: "text-ink", bar: "bg-ink" },
+    { k: "Accepted", v: count("accepted"), tone: "text-accept", bar: "bg-accept" },
+    { k: "Talk to candidate", v: count("talk"), tone: "text-talk", bar: "bg-talk" },
+    { k: "Rejected", v: count("rejected"), tone: "text-reject", bar: "bg-reject" },
+    { k: "Pending review", v: count("pending"), tone: "text-pending", bar: "bg-pending" },
   ];
 
   return (
@@ -153,21 +179,14 @@ function CandidatesList() {
             <option key={j.id} value={j.id}>{j.title} ({j.candidates})</option>
           ))}
         </select>
-        <button
-          onClick={() => setOnlyIneligible((v) => !v)}
-          aria-pressed={onlyIneligible}
-          className={cx("inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors", onlyIneligible ? "border-reject bg-reject text-white" : "border-line-strong bg-card text-ink-soft hover:text-ink")}
-        >
-          <ShieldAlert size={15} /> Not eligible only
-        </button>
         <div className="relative min-w-[200px] flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, role or skill…" aria-label="Search candidates" className="w-full rounded-full border border-line-strong bg-card py-2 pl-10 pr-4 text-sm outline-none focus:border-forest focus:ring-4 focus:ring-forest/10" />
         </div>
       </div>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
+      {/* Table. While a filter loads, the old list dims and then eases into the new one. */}
+      <Card className={cx("overflow-hidden transition-opacity duration-200", loading && rows !== null && "pointer-events-none opacity-60")}>
         {rows === null ? (
           <div className="space-y-px">
             {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-[72px]" />)}
@@ -186,8 +205,18 @@ function CandidatesList() {
             {!stats?.total && <Link href="/home" className={cx(btn.primary, "mt-6")}>Screen your first resume</Link>}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[1060px] table-fixed text-left text-sm">
+              {/* Fixed column widths: the columns stay put whatever the filters leave in the list. */}
+              <colgroup>
+                <col />
+                <col className="w-48" />
+                <col className="w-[6.5rem]" />
+                <col className="w-[10.5rem]" />
+                <col className="w-[10.5rem]" />
+                <col className="w-[8.5rem]" />
+                <col className="w-12" />
+              </colgroup>
               <thead className="border-b border-line bg-paper-2/50">
                 <tr className="eyebrow !text-[0.66rem]">
                   <th className="px-5 py-3 font-medium">Candidate</th>
@@ -196,18 +225,19 @@ function CandidatesList() {
                   <th className="px-3 py-3 font-medium">AI suggests</th>
                   <th className="px-3 py-3 font-medium">HR status</th>
                   <th className="px-5 py-3 font-medium">Screened</th>
+                  <th className="px-3 py-3"><span className="sr-only">Delete</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {shown!.map((r) => (
-                  <tr key={r.id} className="group relative transition-colors hover:bg-paper/70">
+                  <tr key={r.id} className="animate-row group relative transition-colors hover:bg-paper/70">
                     <td className="px-5 py-3.5">
                       <Link href={`/candidates/${r.id}`} className="font-semibold after:absolute after:inset-0 group-hover:text-forest">{r.name}</Link>
                       <p className="max-w-[16rem] truncate text-ink-soft">{r.current_role || r.email || r.file_name}</p>
                       {r.dup_count > 0 && (
-                        <span className="relative z-10 mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk" title="Looks like the same person as another record — open the report to see them">
+                        <Link href={`/candidates/${r.id}#duplicates`} className="relative z-10 mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk hover:bg-talk/15" title="Looks like the same person as another record. Click to review or merge them.">
                           <Copy size={11} /> Seen before
-                        </span>
+                        </Link>
                       )}
                     </td>
                     <td className="max-w-[14rem] truncate px-3 py-3.5 text-ink-soft">{r.job_title}</td>
@@ -221,7 +251,7 @@ function CandidatesList() {
                     </td>
                     <td className="px-3 py-3.5">
                       {r.gate_missing.length ? (
-                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-reject px-2.5 py-1 text-xs font-semibold text-white" title={`Missing mandatory: ${r.gate_missing.join(", ")}`}>
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-reject px-2.5 py-1 text-xs font-semibold text-on-solid" title={`Missing mandatory: ${r.gate_missing.join(", ")}`}>
                           <ShieldAlert size={13} /> Not eligible
                         </span>
                       ) : (
@@ -230,6 +260,16 @@ function CandidatesList() {
                     </td>
                     <td className="px-3 py-3.5"><StatusBadge status={r.hr_status} /></td>
                     <td className="px-5 py-3.5 font-mono text-xs text-ink-soft">{formatDate(r.created_at)}</td>
+                    <td className="px-3 py-3.5">
+                      <button
+                        onClick={() => (setDeleteError(""), setToDelete(r))}
+                        aria-label={`Delete ${r.name}`}
+                        title="Delete this entry"
+                        className="relative z-10 grid h-8 w-8 place-items-center rounded-full text-ink-faint transition-colors hover:bg-reject-bg hover:text-reject"
+                      >
+                        <X size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -237,6 +277,16 @@ function CandidatesList() {
           </div>
         )}
       </Card>
+      {toDelete && (
+        <ConfirmDialog
+          title="Delete this entry?"
+          message={`Do you want "${toDelete.name}" to be deleted permanently? This removes the candidate and their screening report from the database and can't be undone.`}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
       {shown && !error && shown.length > 0 && <p className="mt-3 text-sm text-ink-soft">{shown.length} candidate{shown.length === 1 ? "" : "s"} shown</p>}
     </>
   );
@@ -268,9 +318,11 @@ export default function Candidates() {
           </button>
         ))}
       </div>
-      {view === "list" && <CandidatesList />}
-      {view === "overview" && <Overview />}
-      {view === "activity" && <ActivityLog />}
+      <div key={view} className="animate-tab">
+        {view === "list" && <CandidatesList />}
+        {view === "overview" && <Overview />}
+        {view === "activity" && <ActivityLog />}
+      </div>
     </>
   );
 }

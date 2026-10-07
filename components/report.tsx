@@ -194,9 +194,9 @@ export default function ReportView({ report: r, jobTitle, fileName, mandatoryIds
 
       {/* ───── Strengths / gaps / risks ───── */}
       <div className="grid gap-6 md:grid-cols-3">
-        <BulletCard title="Strengths" items={r.strengths} tone="text-accept" icon={ThumbsUp} empty="Nothing notable stood out." />
-        <BulletCard title="Gaps" items={r.gaps} tone="text-talk" icon={AlertTriangle} empty="No major gaps found." />
-        <BulletCard title="Double-check" items={r.risks} tone="text-reject" icon={CircleHelp} empty="No red flags spotted." />
+        <BulletCard title="Strengths" items={r.strengths} tone="text-accept" icon={ThumbsUp} empty="No notable strengths identified." />
+        <BulletCard title="Gaps" items={r.gaps} tone="text-talk" icon={AlertTriangle} empty="No significant gaps identified." />
+        <BulletCard title="Points to verify" items={r.risks} tone="text-reject" icon={CircleHelp} empty="No concerns identified." />
       </div>
     </div>
   );
