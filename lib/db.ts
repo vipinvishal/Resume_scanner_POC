@@ -17,6 +17,7 @@ import {
   type JobRequirements,
   type JobRow,
   type Report,
+  type SavedResume,
 } from "./types";
 import { DATA_DIR, getSettings } from "./settings";
 import { openMssql } from "./store/mssql";
@@ -515,6 +516,31 @@ export async function getCandidate(id: number): Promise<CandidateDetail | null> 
     duplicates,
     mandatory_ids: reqs.filter((x) => x.mandatory).map((x) => x.id),
   };
+}
+
+/** Every distinct saved resume (newest copy of each), so HR can screen them against a new job. */
+export async function listSavedResumes(q?: string): Promise<SavedResume[]> {
+  const rows = await (await db()).all<{ id: number; name: string; email: string; candidate_role: string; file_name: string; created_at: string; score: number; resume_hash: string | null; job_title: string | null }>(
+    `SELECT c.id, c.name, c.email, c.candidate_role, c.file_name, c.created_at, c.score, c.resume_hash, j.title AS job_title
+       FROM ${CANDS} c LEFT JOIN ${JOBS} j ON j.id = c.job_id ORDER BY c.id DESC`,
+  );
+  const seen = new Set<string>();
+  const needle = q?.trim().toLowerCase();
+  const out: SavedResume[] = [];
+  for (const r of rows) {
+    const key = r.resume_hash || `${norm(r.email)}|${norm(r.name)}|${r.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (needle && !`${r.name}\n${r.email}\n${r.candidate_role}\n${r.file_name}`.toLowerCase().includes(needle)) continue;
+    out.push({ id: Number(r.id), name: r.name, email: r.email, current_role: r.candidate_role, file_name: r.file_name, created_at: r.created_at, last_job: r.job_title ?? "", last_score: Number(r.score) });
+  }
+  return out;
+}
+
+/** The stored text of a resume, to screen it again for another job. */
+export async function getSavedResumeText(id: number): Promise<{ fileName: string; text: string } | null> {
+  const r = (await (await db()).all<{ file_name: string; resume_text: string }>(`SELECT file_name, resume_text FROM ${CANDS} WHERE id = ?`, [id]))[0];
+  return r ? { fileName: r.file_name, text: r.resume_text } : null;
 }
 
 /** What the AI review needs: the stored resume text and the job it was screened for. */

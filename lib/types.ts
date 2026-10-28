@@ -126,6 +126,18 @@ export interface CandidateRow {
   report?: Report;
 }
 
+/** One saved resume that can be screened again against a different job. */
+export interface SavedResume {
+  id: number;
+  name: string;
+  email: string;
+  current_role: string;
+  file_name: string;
+  created_at: string;
+  last_job: string;
+  last_score: number;
+}
+
 /** Another record that looks like the same person (or the very same file). */
 export interface DupRef {
   id: number;

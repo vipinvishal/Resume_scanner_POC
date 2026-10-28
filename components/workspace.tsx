@@ -11,6 +11,9 @@ import {
   Copy,
   Loader2,
   Lock,
+  Search,
+  Upload,
+  Users,
   MessageCircleQuestion,
   RotateCcw,
   ShieldAlert,
@@ -22,7 +25,7 @@ import { ConfirmDialog } from "./confirm";
 import { FileDrop, JdInput, jdFormData, jdReady, type JdValue } from "./inputs";
 import { Card, VerdictBadge, btn, cx } from "./ui";
 import { gateMissing } from "@/lib/gate";
-import type { CandidateRow, DupRef, HrStatus, JobRow, Report } from "@/lib/types";
+import type { CandidateRow, DupRef, HrStatus, JobRow, Report, SavedResume } from "@/lib/types";
 
 type RowState =
   | { state: "queued" }
@@ -34,6 +37,8 @@ interface Row {
   uid: number;
   name: string;
   file?: File;
+  /** A resume already saved from an earlier job (screened again for this one). */
+  fromId?: number;
   res: RowState;
 }
 
@@ -108,6 +113,83 @@ function SkillChips({ report }: { report: Report }) {
   );
 }
 
+function SavedPicker({
+  library,
+  error,
+  q,
+  onQ,
+  picked,
+  onPicked,
+  disabled,
+}: {
+  library: SavedResume[] | null;
+  error: string;
+  q: string;
+  onQ: (v: string) => void;
+  picked: Set<number>;
+  onPicked: (s: Set<number>) => void;
+  disabled: boolean;
+}) {
+  if (error) return <p className="rounded-xl border border-reject/30 bg-reject-bg/70 px-4 py-3 text-sm text-reject">{error}</p>;
+  if (!library) return <div className="skeleton h-48 rounded-xl" />;
+  if (!library.length) return <p className="rounded-xl border border-dashed border-line-strong px-4 py-10 text-center text-sm text-ink-soft">No saved resumes yet. Screen some resumes first and they will appear here.</p>;
+
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? library.filter((x) => `${x.name} ${x.email} ${x.current_role} ${x.file_name}`.toLowerCase().includes(needle)) : library;
+  const allShown = shown.length > 0 && shown.every((x) => picked.has(x.id));
+  const toggle = (id: number) => {
+    const n = new Set(picked);
+    if (!n.delete(id)) n.add(id);
+    onPicked(n);
+  };
+  const toggleAll = () => {
+    const n = new Set(picked);
+    for (const x of shown) {
+      if (allShown) n.delete(x.id);
+      else n.add(x.id);
+    }
+    onPicked(n);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative">
+        <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+        <input
+          value={q}
+          onChange={(e) => onQ(e.target.value)}
+          placeholder="Search by name, role, email or file"
+          aria-label="Search saved resumes"
+          className="w-full rounded-xl border border-line-strong bg-paper/50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-forest focus:bg-card focus:ring-4 focus:ring-forest/10"
+        />
+      </div>
+      <div className="mt-2.5 flex items-center justify-between text-xs text-ink-soft">
+        <button type="button" onClick={toggleAll} disabled={disabled || !shown.length} className="font-medium text-forest underline disabled:opacity-40">
+          {allShown ? "Clear" : needle ? "Select all shown" : "Select all"} ({shown.length})
+        </button>
+        <span>{picked.size} selected of {library.length}</span>
+      </div>
+      <ul className="mt-2 max-h-72 divide-y divide-line overflow-auto rounded-xl border border-line">
+        {shown.map((x) => (
+          <li key={x.id}>
+            <label className={cx("flex cursor-pointer items-start gap-3 px-3.5 py-2.5 text-sm transition-colors hover:bg-moss/30", picked.has(x.id) && "bg-moss/40")}>
+              <input type="checkbox" checked={picked.has(x.id)} onChange={() => toggle(x.id)} disabled={disabled} className="mt-1 h-4 w-4 accent-forest" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{x.name || x.file_name}</span>
+                <span className="block truncate text-xs text-ink-soft">{x.current_role || x.file_name}</span>
+                <span className="block truncate text-xs text-ink-faint">
+                  {x.last_job ? `Last screened for ${x.last_job} · ${x.last_score}` : "Saved"} · {fmtDay(x.created_at)}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+        {!shown.length && <li className="px-4 py-6 text-center text-sm text-ink-soft">No saved resume matches “{q}”.</li>}
+      </ul>
+    </div>
+  );
+}
+
 const dupTipOf = (d: DupRef) =>
   d.basis === "file"
     ? `The same resume file was already screened for "${d.job_title}" on ${fmtDay(d.created_at)}.`
@@ -134,6 +216,13 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
   const cancelled = useRef(false);
   const uid = useRef(0);
   const aiReady = useRef(false);
+
+  // Step 2 can also pick resumes already saved from earlier jobs.
+  const [mode, setMode] = useState<"upload" | "saved">("upload");
+  const [library, setLibrary] = useState<SavedResume[] | null>(null);
+  const [libError, setLibError] = useState("");
+  const [libQ, setLibQ] = useState("");
+  const [picked, setPicked] = useState<Set<number>>(new Set());
 
   // Numbers follow the selected job; with no job selected they cover everything.
   const jobId = job?.id;
@@ -209,8 +298,9 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     loadStats();
   }, [loadStats]);
 
-  const ready = jdReady(jd) && files.length > 0;
-  const readyWithJob = !!job && files.length > 0;
+  const count = mode === "saved" ? picked.size : files.length;
+  const ready = jdReady(jd) && count > 0;
+  const readyWithJob = !!job && count > 0;
   const patch = (u: number, res: RowState) => setRows((r) => r.map((x) => (x.uid === u ? { ...x, res } : x)));
 
   function pickJob(value: string) {
@@ -232,7 +322,8 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     try {
       const fd = new FormData();
       fd.append("jobId", String(jobId));
-      fd.append("resume", row.file!);
+      if (row.fromId) fd.append("fromId", String(row.fromId));
+      else fd.append("resume", row.file!);
       fd.append("source", "bulk");
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
       const data = await res.json();
@@ -256,6 +347,12 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       patch(row.uid, { state: "error", error: (e as Error).message });
       return null;
     }
+  }
+
+  /** Retry a failed resume right away, even while the rest of the batch is still going. */
+  async function retryOne(row: Row, jobId: number) {
+    const r = await analyzeOne(row, jobId);
+    if (r && aiReady.current) await reviewOne(r.uid, r.id);
   }
 
   /** The AI review of one resume that only has its instant-check result. */
@@ -286,6 +383,23 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         if (!(await reviewOne(next.uid, next.id))) failed = true;
     };
     await Promise.all(Array.from({ length: Math.max(1, Math.min(parallel, queue.length)) }, worker));
+  }
+
+  const loadLibrary = useCallback(async () => {
+    setLibError("");
+    try {
+      const r = await fetch("/api/resumes");
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Couldn't load the saved resumes.");
+      setLibrary(d);
+    } catch (e) {
+      setLibError((e as Error).message);
+    }
+  }, []);
+
+  function chooseMode(m: "upload" | "saved") {
+    setMode(m);
+    if (m === "saved") void loadLibrary();
   }
 
   async function run() {
@@ -320,9 +434,14 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       }
     }
 
-    const batch: Row[] = files.map((file) => ({ uid: uid.current++, name: file.name, file, res: { state: "queued" } }));
+    const savedPicks = (library ?? []).filter((x) => picked.has(x.id));
+    const batch: Row[] =
+      mode === "saved"
+        ? savedPicks.map((x) => ({ uid: uid.current++, name: x.name || x.file_name, fromId: x.id, res: { state: "queued" } }))
+        : files.map((file) => ({ uid: uid.current++, name: file.name, file, res: { state: "queued" } }));
     setRows([...keep, ...batch]);
-    setFiles([]);
+    if (mode === "saved") setPicked(new Set());
+    else setFiles([]);
 
     // Step 1 is instant (no AI), one resume at a time. Step 2: the AI reviews the best ones.
     const handled = new Set<number>();
@@ -343,7 +462,9 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     }
     if (cancelled.current) {
       // Give the unprocessed resumes back so nothing has to be re-added.
-      setFiles(batch.filter((b) => !handled.has(b.uid)).map((b) => b.file!));
+      const left = batch.filter((b) => !handled.has(b.uid));
+      if (mode === "saved") setPicked(new Set(left.map((b) => b.fromId!)));
+      else setFiles(left.map((b) => b.file!));
       setRows((r) => r.filter((x) => x.res.state !== "queued"));
     }
     setRunning(false);
@@ -597,9 +718,38 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
 
         <Card className="flex flex-col p-6">
           <Step n={2}>
-            Resumes {files.length > 0 && <span className="font-sans text-base font-normal text-ink-soft">({files.length})</span>}
+            Resumes {count > 0 && <span className="font-sans text-base font-normal text-ink-soft">({count})</span>}
           </Step>
-          <FileDrop multiple fill files={files} onChange={setFiles} title="Drop resumes here, or click to browse" hint="One or many at once · PDF, DOCX or TXT" />
+          <div role="tablist" aria-label="Where the resumes come from" className="mb-4 inline-flex self-start rounded-full border border-line bg-paper/50 p-1 text-sm">
+            {([
+              ["upload", "Upload new", Upload],
+              ["saved", "From saved resumes", Users],
+            ] as const).map(([m, label, Icon]) => (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => chooseMode(m)}
+                disabled={running}
+                className={cx("inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition-colors", mode === m ? "bg-forest text-paper" : "text-ink-soft hover:text-ink")}
+              >
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
+          {mode === "upload" ? (
+            <FileDrop multiple fill files={files} onChange={setFiles} title="Drop resumes here, or click to browse" hint="One or many at once · PDF, DOCX or TXT" />
+          ) : (
+            <SavedPicker
+              library={library}
+              error={libError}
+              q={libQ}
+              onQ={setLibQ}
+              picked={picked}
+              onPicked={setPicked}
+              disabled={running}
+            />
+          )}
 
           {error && (
             <div role="alert" className="mt-4 flex items-start gap-3 rounded-xl border border-reject/30 bg-reject-bg/70 px-4 py-3 text-reject">
@@ -616,12 +766,12 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                 </>
               ) : (
                 <>
-                  <Zap size={18} /> Screen {files.length > 1 ? `${files.length} resumes` : "resume"} <ArrowRight size={18} />
+                  <Zap size={18} /> Screen {count > 1 ? `${count} resumes` : "resume"} <ArrowRight size={18} />
                 </>
               )}
             </button>
             {!(job ? readyWithJob : ready) && !running && (
-              <p className="mt-2 text-center text-sm text-ink-soft">{!job && !jdReady(jd) ? "Select a saved job or add a job description to begin." : "Add at least one resume to continue."}</p>
+              <p className="mt-2 text-center text-sm text-ink-soft">{!job && !jdReady(jd) ? "Select a saved job or add a job description to begin." : mode === "saved" ? "Tick at least one saved resume to continue." : "Add at least one resume to continue."}</p>
             )}
           </div>
         </Card>
@@ -842,8 +992,8 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                             </>
                           )}
                           {r.res.state === "queued" && "Waiting"}
-                          {r.res.state === "error" && r.file && job && (
-                            <button onClick={() => analyzeOne(r, job.id)} disabled={running} className={cx(btn.ghost, "!px-3.5 !py-1.5 text-xs")}>
+                          {r.res.state === "error" && (r.file || r.fromId) && job && (
+                            <button onClick={() => retryOne(r, job.id)} className={cx(btn.ghost, "!px-3.5 !py-1.5 text-xs")}>
                               <RotateCcw size={13} /> Retry
                             </button>
                           )}
