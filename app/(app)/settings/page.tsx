@@ -181,6 +181,23 @@ export default function SettingsPage() {
               placeholder={f.provider === "ollama" ? "e.g. qwen3:8b" : "Model name"}
             />
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="top" className="mb-1.5 block text-sm font-medium">AI reviews the best</label>
+                <input id="top" type="number" min={0} max={100} className={field} value={f.aiReviewTop} onChange={(e) => set("aiReviewTop", Number(e.target.value))} />
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  Every resume gets an instant keyword score; the AI then reviews this many of the highest-scoring ones. 0 = instant scores only.
+                </p>
+              </div>
+              <div>
+                <label htmlFor="par" className="mb-1.5 block text-sm font-medium">Resumes read at once</label>
+                <input id="par" type="number" min={1} max={4} className={field} value={f.parallel} onChange={(e) => set("parallel", Number(e.target.value))} />
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  Keep 1 on a laptop or CPU. With a GPU, use 2–4 and start Ollama with <span className="font-mono">OLLAMA_NUM_PARALLEL</span> set to the same number.
+                </p>
+              </div>
+            </div>
+
             {(f.provider === "openai" || f.provider === "anthropic") && (
               <details className="group rounded-xl border border-line bg-paper/40 px-4 py-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">

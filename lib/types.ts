@@ -68,6 +68,8 @@ export interface Report {
   strengths: string[];
   gaps: string[];
   risks: string[];
+  /** True while this is only the instant keyword check — the AI review hasn't run (yet). */
+  quick?: boolean;
 }
 
 export interface Settings {
@@ -84,6 +86,10 @@ export interface Settings {
   ollamaModel: string;
   acceptThreshold: number;
   talkThreshold: number;
+  /** How many resumes the AI reads at the same time (needs OLLAMA_NUM_PARALLEL on a local Ollama). */
+  parallel: number;
+  /** After the instant check, only the best N resumes get the slower AI review (0 = none). */
+  aiReviewTop: number;
   db: DbConfig;
 }
 

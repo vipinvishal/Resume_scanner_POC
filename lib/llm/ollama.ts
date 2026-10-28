@@ -1,12 +1,18 @@
 import type { Settings } from "../types";
 import type { LlmRequest } from "./index";
 
-const base = (s: Settings) => s.ollamaUrl.trim().replace(/\/+$/, "");
+// Node resolves "localhost" to IPv6 (::1) first, but Ollama listens on IPv4 only, so "fetch failed" even though Ollama is running.
+const base = (s: Settings) => {
+  let u = s.ollamaUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  if (!/^https?:\/\//i.test(u)) u = `http://${u}`;
+  return u.replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, "$1127.0.0.1");
+};
 
 function unreachable(s: Settings, e: unknown): Error {
   const msg = (e as Error)?.message ?? String(e);
-  if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(msg) || (e as { cause?: unknown })?.cause)
-    return new Error(`Can't reach Ollama at ${base(s)}. Is Ollama running? (try: ollama serve)`);
+  const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(msg) || cause)
+    return new Error(`Can't reach Ollama at ${base(s)} (${cause?.code ?? cause?.message ?? msg}). Is Ollama running? (try: ollama serve) Check the address in Settings.`);
   return e as Error;
 }
 
@@ -20,7 +26,7 @@ export async function ollamaChat(s: Settings, req: LlmRequest): Promise<string> 
         { role: "system", content: req.system },
         { role: "user", content: req.prompt },
       ],
-      options: { temperature: 0.1, num_ctx: 12288 },
+      options: { temperature: 0.1, num_ctx: 8192, num_predict: 2048 },
     };
     if (opts.format) body.format = opts.format;
     if (!opts.think) body.think = false;
@@ -33,8 +39,8 @@ export async function ollamaChat(s: Settings, req: LlmRequest): Promise<string> 
   };
 
   try {
-    let res = await call({ think: false, format: req.jsonSchema ?? "json" });
-    // Some builds reject `think` or a schema-style format: retry once plainly.
+    let res = await call({ think: false, format: "json" });
+    // Some builds reject `think`: retry once with it left at the default.
     if (res.status === 400) res = await call({ think: true, format: "json" });
     if (!res.ok) {
       const t = await res.text();

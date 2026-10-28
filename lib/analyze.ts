@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { generateJson } from "./llm";
+import { quickFacts } from "./prescreen";
 import { getSettings } from "./settings";
 import type { FitBlock, JobRequirements, Report, Settings, Verdict } from "./types";
 
 const MAX_JD_CHARS = 12_000;
-const MAX_RESUME_CHARS = 18_000;
+const MAX_RESUME_CHARS = 12_000;
 
 // Local models are sloppier than Gemini: null for "", "Present" for "present", a string where a list belongs.
 // Accept those and clean them up instead of failing the whole analysis.
@@ -129,53 +130,87 @@ const ResumeSchema = z.object({
   risks: listOfText(5),
 });
 
-export async function analyzeResume(
+/** Instant first pass: text matching only, no AI. Takes milliseconds. */
+export function quickReport(req: JobRequirements, resumeText: string, fileName: string, s: Settings = getSettings()): Report {
+  const q = quickFacts(req, resumeText.slice(0, MAX_RESUME_CHARS));
+  const report = buildReport(req, { ...q, risks: [], skills: q.skills.map((k) => ({ id: k.id, status: k.status, evidence: k.evidence })) }, fileName, s);
+  return { ...report, quick: true };
+}
+
+/**
+ * The AI review. The instant pass already settled every requirement it found in the text, so the AI only
+ * judges the rest and writes the assessment — far fewer tokens to write, which is what a local model is slow at.
+ * Everything that is the same for every resume of this job comes first, so Ollama can reuse its work between resumes.
+ */
+export async function reviewResume(
   req: JobRequirements,
   resumeText: string,
   fileName: string,
   s: Settings = getSettings(),
 ): Promise<Report> {
   const resume = resumeText.slice(0, MAX_RESUME_CHARS);
-  const reqList = req.requirements
-    .map((r) => `- id "${r.id}" (${r.type === "must" ? "must-have" : "nice-to-have"}): ${r.text}`)
-    .join("\n");
+  const q = quickFacts(req, resume);
+  const open = q.skills.filter((k) => k.status !== "present");
+  const reqList = req.requirements.map((r) => `- id "${r.id}" (${r.type === "must" ? "must-have" : "nice-to-have"}): ${r.text}`).join("\n");
 
   const out = await generateJson(
     ResumeSchema,
     {
       system: SYSTEM_BASE,
-      prompt: `Compare this candidate's resume against the job requirements and produce a screening assessment for HR.
+      prompt: `You compare one candidate's resume with a job and write a short screening assessment for HR.
 
 JOB: ${req.title}
 ${req.summary}
 Experience expected: ${req.experienceNote}${req.minYearsExperience != null ? ` (minimum ${req.minYearsExperience} years)` : ""}
 Education expected: ${req.education}
 
-REQUIREMENTS TO CHECK:
+REQUIREMENTS:
 ${reqList}
 
-Instructions:
-- "candidate": details from the resume. Use "" when not found. "totalYears" is total professional experience as a number, or null if unclear.
-- "summary": 2-3 sentences for HR about how well this person fits THIS role, in plain English.
-- "skills": return exactly one entry for EVERY requirement id listed above. "status" is "present" if the resume clearly shows it, "partial" if it is related or only briefly/indirectly shown, "missing" if there is no evidence. Do not assume skills that are not written in the resume. "evidence": a short note (max 20 words) pointing to where in the resume you saw it (project, role or skill list). For missing, write "Not mentioned in the resume."
-- "experience": "candidate" = short description of their experience level; "fit" = exceeds / meets / partial / below / unknown versus what the job expects; "comment" = one plain sentence.
-- "education": same structure, compared with the education expected. Use "unknown" if the resume doesn't say.
-- "strengths": 3-5 short bullet points on what stands out positively for THIS role.
-- "gaps": up to 5 short bullet points on important things from the job that the resume lacks.
-- "risks": up to 4 things HR should double-check (e.g. frequent job changes, unexplained career gaps, vague claims, very short stints). Empty array if none.
+Instructions (keep every text short):
+- "candidate": details from the resume ("" when not found). "totalYears" is a number or null.
+- "summary": 2 sentences for HR about how well this person fits THIS role.
+- "skills": ONLY for the ids under "STILL TO CHECK" at the end. "status" is "present" (clearly shown), "partial" (related or only indirectly shown) or "missing" (no evidence). Do not assume skills that are not written. "evidence": max 8 words, or "Not mentioned" for missing.
+- "experience" and "education": "candidate" = a few words; "fit" = exceeds / meets / partial / below / unknown versus what the job expects; "comment" = max 12 words.
+- "strengths": up to 3 short points. "gaps": up to 3 short points. "risks": up to 2 things to double-check, or an empty array.
 
 RESUME (file: ${fileName}):
 """
 ${resume}
-"""`,
+"""
+
+STILL TO CHECK (the other requirements were already found in the resume):
+${open.length ? open.map((k) => `- id "${k.id}": ${k.requirement}`).join("\n") : "(none — return an empty skills array)"}`,
     },
     s,
   );
 
-  return buildReport(req, out, fileName, s);
+  const asked = new Set(open.map((k) => k.id.toLowerCase()));
+  const judged = out.skills.filter((k) => asked.has(k.id.trim().toLowerCase()));
+  const kept = q.skills.filter((k) => k.status === "present").map((k) => ({ id: k.id, status: k.status, evidence: k.evidence }));
+  const pick = <T extends string | number | null>(ai: T, rule: T) => (ai === "" || ai == null ? rule : ai);
+  return buildReport(
+    req,
+    {
+      ...out,
+      candidate: {
+        name: pick(out.candidate.name.trim(), q.candidate.name),
+        email: pick(out.candidate.email.trim(), q.candidate.email),
+        phone: pick(out.candidate.phone.trim(), q.candidate.phone),
+        currentRole: out.candidate.currentRole,
+        location: out.candidate.location,
+        totalYears: pick(out.candidate.totalYears, q.candidate.totalYears),
+      },
+      skills: [...kept, ...judged],
+    },
+    fileName,
+    s,
+  );
 }
 
 /* ───────────── Scoring: done in code so it's consistent & explainable ───────────── */
+
+type ReportInput = z.infer<typeof ResumeSchema>;
 
 const FIT_POINTS: Record<FitBlock["fit"], number> = { exceeds: 100, meets: 100, partial: 60, below: 20, unknown: 50 };
 export const WEIGHTS = { skills: 0.7, experience: 0.2, education: 0.1 };
@@ -186,7 +221,7 @@ export function verdictFor(score: number, s: Settings): Verdict {
   return "reject";
 }
 
-function buildReport(req: JobRequirements, out: z.infer<typeof ResumeSchema>, fileName: string, s: Settings): Report {
+function buildReport(req: JobRequirements, out: ReportInput, fileName: string, s: Settings): Report {
   const byId = new Map(out.skills.map((x) => [x.id.trim().toLowerCase(), x]));
   const skills = req.requirements.map((r) => {
     const m = byId.get(r.id.toLowerCase());

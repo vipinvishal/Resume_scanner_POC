@@ -517,6 +517,37 @@ export async function getCandidate(id: number): Promise<CandidateDetail | null> 
   };
 }
 
+/** What the AI review needs: the stored resume text and the job it was screened for. */
+export async function getReviewInput(id: number): Promise<{ jobId: number; fileName: string; resumeText: string; hash: string; requirements: JobRequirements } | null> {
+  const r = (
+    await (await db()).all<{ job_id: number; file_name: string; resume_text: string; resume_hash: string | null; requirements: string | null }>(
+      `SELECT c.job_id, c.file_name, c.resume_text, c.resume_hash, j.requirements FROM ${CANDS} c LEFT JOIN ${JOBS} j ON j.id = c.job_id WHERE c.id = ?`,
+      [id],
+    )
+  )[0];
+  if (!r || !r.requirements) return null;
+  return { jobId: Number(r.job_id), fileName: r.file_name, resumeText: r.resume_text, hash: r.resume_hash ?? textHash(r.resume_text), requirements: JSON.parse(r.requirements) };
+}
+
+/** Replace the instant-check result with the AI-reviewed one. HR's decision and note are left alone. */
+export async function updateCandidateReport(id: number, report: Report, provider: string, model: string, gate: string[], actor = "system") {
+  const d = await db();
+  const cur = (await d.all<{ name: string; job_id: number }>(`SELECT name, job_id FROM ${CANDS} WHERE id = ?`, [id]))[0];
+  if (!cur) return;
+  const name = (report.candidate.name || cur.name).slice(0, 255);
+  await d.run(
+    `UPDATE ${CANDS} SET name = ?, email = ?, candidate_role = ?, score = ?, ai_verdict = ?, provider = ?, model = ?, report = ?, gate_missing = ? WHERE id = ?`,
+    [name, (report.candidate.email ?? "").slice(0, 255), (report.candidate.currentRole ?? "").slice(0, 255), report.score, report.verdict, provider.slice(0, 30), model.slice(0, 120), JSON.stringify(report), JSON.stringify(gate), id],
+  );
+  await writeAudit(d, {
+    actor,
+    action: "screened",
+    candidateId: id,
+    jobId: Number(cur.job_id),
+    summary: `AI reviewed ${name} — match ${report.score}, AI suggests ${VERDICT_LABEL[report.verdict]}${gate.length ? `, NOT ELIGIBLE (missing ${gate.join(", ")})` : ""}`,
+  });
+}
+
 export async function updateCandidateStatus(id: number, status: HrStatus, note?: string, actor = "system"): Promise<boolean> {
   const d = await db();
   const cur = (await d.all<{ hr_status: HrStatus; note: string; name: string; job_id: number }>(`SELECT hr_status, note, name, job_id FROM ${CANDS} WHERE id = ?`, [id]))[0];

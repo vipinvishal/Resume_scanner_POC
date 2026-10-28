@@ -38,6 +38,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaModel: "",
   acceptThreshold: 75,
   talkThreshold: 50,
+  parallel: 1,
+  aiReviewTop: 5,
   db: DEFAULT_DB,
 };
 
@@ -108,6 +110,11 @@ export function applyForm(saved: Settings, b: Partial<Omit<Settings, "db">> & { 
     next.acceptThreshold = Math.round(acc);
     next.talkThreshold = Math.round(talk);
   }
+
+  const par = Number(b.parallel);
+  if (Number.isFinite(par)) next.parallel = Math.min(4, Math.max(1, Math.round(par)));
+  const top = Number(b.aiReviewTop);
+  if (Number.isFinite(top)) next.aiReviewTop = Math.min(100, Math.max(0, Math.round(top)));
 
   const d = b.db;
   if (d) {

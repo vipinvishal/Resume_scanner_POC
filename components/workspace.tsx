@@ -28,7 +28,7 @@ type RowState =
   | { state: "queued" }
   | { state: "running" }
   | { state: "error"; error: string }
-  | { state: "done"; id: number; report: Report; hr: HrStatus; dups: number; dupTip: string; created: string };
+  | { state: "done"; id: number; report: Report; hr: HrStatus; dups: number; dupTip: string; created: string; reviewing?: boolean };
 
 interface Row {
   uid: number;
@@ -133,6 +133,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
 
   const cancelled = useRef(false);
   const uid = useRef(0);
+  const aiReady = useRef(false);
 
   // Numbers follow the selected job; with no job selected they cover everything.
   const jobId = job?.id;
@@ -225,7 +226,8 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     } else void openJob(Number(value));
   }
 
-  async function analyzeOne(row: Row, jobId: number) {
+  /** The instant check for one resume (no AI). Returns what the AI review needs, or null if there is nothing to review. */
+  async function analyzeOne(row: Row, jobId: number): Promise<{ uid: number; id: number; score: number } | null> {
     patch(row.uid, { state: "running" });
     try {
       const fd = new FormData();
@@ -236,6 +238,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Analysis failed.");
       const dups: DupRef[] = data.duplicates ?? [];
+      if (data.plan) aiReady.current = data.plan.aiReady;
 
       if (data.reused) {
         // Same file, same job: the earlier result is already in the list (or will be shown now) — never twice.
@@ -245,12 +248,44 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
             ? rs.filter((r) => r.uid !== row.uid)
             : rs.map((r) => (r.uid === row.uid ? { ...r, res: { state: "done", id: data.id, report: data.report, hr: data.hr_status, dups: dups.length, dupTip: dups[0] ? dupTipOf(dups[0]) : "", created: new Date().toISOString() } } : r)),
         );
-        return;
+        return null;
       }
       patch(row.uid, { state: "done", id: data.id, report: data.report, hr: "pending", dups: dups.length, dupTip: dups[0] ? dupTipOf(dups[0]) : "", created: new Date().toISOString() });
+      return data.report.quick ? { uid: row.uid, id: data.id, score: data.report.score } : null;
     } catch (e) {
       patch(row.uid, { state: "error", error: (e as Error).message });
+      return null;
     }
+  }
+
+  /** The AI review of one resume that only has its instant-check result. */
+  async function reviewOne(uidOf: number, id: number): Promise<boolean> {
+    const mark = (f: (d: Extract<RowState, { state: "done" }>) => RowState) =>
+      setRows((rs) => rs.map((x) => (x.uid === uidOf && x.res.state === "done" ? { ...x, res: f(x.res) } : x)));
+    mark((d) => ({ ...d, reviewing: true }));
+    try {
+      const res = await fetch(`/api/candidates/${id}/review`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "AI review failed.");
+      const dups: DupRef[] = data.duplicates ?? [];
+      mark((d) => ({ ...d, report: data.report, reviewing: false, dups: dups.length, dupTip: dups[0] ? dupTipOf(dups[0]) : "" }));
+      return true;
+    } catch (e) {
+      mark((d) => ({ ...d, reviewing: false }));
+      setNotices((n) => (n.length ? n : [`AI review stopped: ${(e as Error).message} The instant-check results are kept.`]));
+      return false;
+    }
+  }
+
+  /** Review the best resumes first, a few at a time. Stops on the first failure (e.g. Ollama not reachable). */
+  async function reviewBest(list: { uid: number; id: number; score: number }[], top: number, parallel: number) {
+    const queue = [...list].sort((a, b) => b.score - a.score).slice(0, top);
+    let failed = false;
+    const worker = async () => {
+      for (let next = queue.shift(); next && !failed && !cancelled.current; next = queue.shift())
+        if (!(await reviewOne(next.uid, next.id))) failed = true;
+    };
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(parallel, queue.length)) }, worker));
   }
 
   async function run() {
@@ -289,12 +324,22 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
     setRows([...keep, ...batch]);
     setFiles([]);
 
-    // One at a time: gentle on rate limits and on a local Ollama model.
+    // Step 1 is instant (no AI), one resume at a time. Step 2: the AI reviews the best ones.
     const handled = new Set<number>();
+    const quick: { uid: number; id: number; score: number }[] = [];
     for (const row of batch) {
       if (cancelled.current) break;
-      await analyzeOne(row, active.id);
+      const r = await analyzeOne(row, active.id);
+      if (r) quick.push(r);
       handled.add(row.uid);
+    }
+    if (!cancelled.current && quick.length && aiReady.current) {
+      let plan = { top: 5, parallel: 1 };
+      try {
+        const st = await (await fetch("/api/settings")).json();
+        plan = { top: st.aiReviewTop ?? 5, parallel: st.parallel ?? 1 };
+      } catch {}
+      if (plan.top > 0) await reviewBest(quick, plan.top, plan.parallel);
     }
     if (cancelled.current) {
       // Give the unprocessed resumes back so nothing has to be re-added.
@@ -707,6 +752,24 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
                             <p className="truncate font-semibold group-hover:text-forest group-hover:underline">{r.res.report.candidate.name}</p>
                             <p className="truncate text-sm text-ink-soft">{r.res.report.candidate.currentRole || r.name}</p>
                           </Link>
+                          {r.res.reviewing ? (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk">
+                              <Loader2 size={11} className="animate-spin" /> AI reviewing…
+                            </span>
+                          ) : (
+                            r.res.report.quick && (
+                              <span className="mt-1 mr-1.5 inline-flex items-center gap-1.5">
+                                <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-medium text-ink-soft ring-1 ring-line" title="Scored by a quick keyword check only. Run the AI review for a proper assessment.">
+                                  Quick check
+                                </span>
+                                {!running && (
+                                  <button onClick={() => reviewOne(r.uid, (r.res as { id: number }).id)} className="text-xs font-medium text-forest underline">
+                                    AI review
+                                  </button>
+                                )}
+                              </span>
+                            )
+                          )}
                           {r.res.dups > 0 && (
                             <Link href={`/candidates/${r.res.id}#duplicates`} title={`${r.res.dupTip} Click to review or merge them.`} className="mt-1 inline-flex items-center gap-1 rounded-full bg-talk-bg px-2 py-0.5 text-xs font-medium text-talk hover:bg-talk/15">
                               <Copy size={11} /> Seen before
