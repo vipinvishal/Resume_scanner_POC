@@ -1,3 +1,4 @@
+import { fail } from "@/lib/api";
 import { guard } from "@/lib/auth";
 import { getSettings, testDatabase } from "@/lib/db";
 import { applyForm, validate } from "@/lib/settings";
@@ -15,6 +16,6 @@ export async function POST(req: Request) {
     const { created } = await testDatabase(db);
     return Response.json({ ok: true, ms: Date.now() - t0, created, database: db.database });
   } catch (e) {
-    return Response.json({ ok: false, error: (e as Error).message }, { status: 400 });
+    return fail(e, 400, { ok: false });
   }
 }

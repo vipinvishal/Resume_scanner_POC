@@ -1,6 +1,6 @@
 import { fail } from "@/lib/api";
 import { currentActor, guard } from "@/lib/auth";
-import { getJob, setMandatory } from "@/lib/db";
+import { deleteJob, getJob, setMandatory } from "@/lib/db";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/jobs/[id]">) {
   const g = await guard();
@@ -22,6 +22,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/jobs/[id]">) {
   try {
     const job = await setMandatory(Number((await ctx.params).id), b.mandatory as string[], currentActor());
     return job ? Response.json(job) : Response.json({ error: "Job not found." }, { status: 404 });
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Permanently delete a job description and the screening results saved for it. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/jobs/[id]">) {
+  const g = await guard();
+  if (g) return g;
+  try {
+    const gone = await deleteJob(Number((await ctx.params).id), currentActor());
+    return gone ? Response.json({ ok: true, ...gone }) : Response.json({ error: "Job not found." }, { status: 404 });
   } catch (e) {
     return fail(e);
   }

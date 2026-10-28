@@ -1,3 +1,4 @@
+import { fail } from "@/lib/api";
 import { guard, currentActor } from "@/lib/auth";
 import { findDuplicates, findSameFile, getCandidate, getJob, getSavedResumeText, getSettings, insertCandidate, textHash } from "@/lib/db";
 import { quickReport } from "@/lib/analyze";
@@ -62,6 +63,6 @@ export async function POST(req: Request) {
     const duplicates = await findDuplicates({ name: report.candidate.name, email: report.candidate.email, hash, jobId, excludeId: id });
     return Response.json({ id, report, reused: false, gate_missing: gate, duplicates, plan });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 400 });
+    return fail(e, 400);
   }
 }

@@ -1,3 +1,4 @@
+import { publicMessage } from "@/lib/friendly";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
@@ -18,7 +19,7 @@ export default async function CandidatePage(props: PageProps<"/candidates/[id]">
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-reject/30 bg-reject-bg/70 p-6 text-reject">
         <p className="font-semibold">Can&apos;t open this report</p>
-        <p className="mt-1 text-sm">{(e as Error).message}</p>
+        <p className="mt-1 text-sm">{publicMessage(e)}</p>
         <Link href="/settings" className="mt-3 inline-block text-sm font-medium underline">Open Settings</Link>
       </div>
     );
@@ -31,7 +32,7 @@ export default async function CandidatePage(props: PageProps<"/candidates/[id]">
         <Link href="/candidates" className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink">
           <ArrowLeft size={16} /> All candidates
         </Link>
-        <PrintButton />
+        <PrintButton id={c.id} />
       </div>
       {c.gate_missing.length > 0 && (
         <div role="alert" className="mb-6 flex items-start gap-3 rounded-2xl border border-reject/30 bg-reject-bg/70 px-5 py-4 text-reject">

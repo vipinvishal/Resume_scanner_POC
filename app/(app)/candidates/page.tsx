@@ -1,8 +1,9 @@
 "use client";
 
+import { publicMessage } from "@/lib/friendly";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Copy, Download, ListChecks, Search, ShieldAlert, Users, X, Zap } from "lucide-react";
+import { BarChart3, Copy, Download, FileText, ListChecks, Search, ShieldAlert, Users, X, Zap } from "lucide-react";
 import type { CandidateRow, HrStatus } from "@/lib/types";
 import ActivityLog from "@/components/activity";
 import { ConfirmDialog } from "@/components/confirm";
@@ -57,6 +58,7 @@ function CandidatesList() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [reload, setReload] = useState(0);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [loadedKey, setLoadedKey] = useState("");
 
   useEffect(() => {
@@ -108,6 +110,16 @@ function CandidatesList() {
   }, [listParams, reload]);
 
   const shown = rows;
+  // Only candidates still on screen count, so a filter change never exports someone you can no longer see.
+  const pickedIds = (shown ?? []).filter((r) => picked.has(r.id)).map((r) => r.id);
+  const allPicked = !!shown?.length && pickedIds.length === shown.length;
+  const togglePick = (id: number) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (!n.delete(id)) n.add(id);
+      return n;
+    });
+  const togglePickAll = () => setPicked(allPicked ? new Set() : new Set((shown ?? []).map((r) => r.id)));
   const loading = loadedKey !== `${listParams}|${reload}`; // what is on screen is from an older filter
 
   async function confirmDelete() {
@@ -121,7 +133,7 @@ function CandidatesList() {
       setReload((n) => n + 1);
       fetch("/api/jobs").then((r) => r.json()).then(setJobs).catch(() => {});
     } catch (e) {
-      setDeleteError((e as Error).message);
+      setDeleteError(publicMessage(e));
     } finally {
       setDeleting(false);
     }
@@ -142,6 +154,15 @@ function CandidatesList() {
       <PageHeader eyebrow="Dashboard" title="Candidates">
         <div className="flex gap-2">
           <a href={`/api/candidates/export?${listParams}`} className={btn.ghost}><Download size={16} /> Export CSV</a>
+          {pickedIds.length ? (
+            <a href={`/api/candidates/export/pdf?ids=${pickedIds.join(",")}`} className={btn.ghost} title="A separate detailed PDF for each ticked candidate">
+              <FileText size={16} /> Detailed PDF ({pickedIds.length} selected)
+            </a>
+          ) : (
+            <button disabled className={cx(btn.ghost, "opacity-50")} title="Tick the candidates you want a detailed PDF report for">
+              <FileText size={16} /> Detailed PDF (select candidates)
+            </button>
+          )}
           <Link href="/home" className={btn.primary}><Zap size={16} /> Screen resumes</Link>
         </div>
       </PageHeader>
@@ -206,9 +227,10 @@ function CandidatesList() {
           </div>
         ) : (
           <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[1060px] table-fixed text-left text-sm">
+            <table className="w-full min-w-[1100px] table-fixed text-left text-sm">
               {/* Fixed column widths: the columns stay put whatever the filters leave in the list. */}
               <colgroup>
+                <col className="w-12" />
                 <col />
                 <col className="w-48" />
                 <col className="w-[6.5rem]" />
@@ -219,7 +241,10 @@ function CandidatesList() {
               </colgroup>
               <thead className="border-b border-line bg-paper-2/50">
                 <tr className="eyebrow !text-[0.66rem]">
-                  <th className="px-5 py-3 font-medium">Candidate</th>
+                  <th className="py-3 pl-5">
+                    <input type="checkbox" checked={allPicked} onChange={togglePickAll} aria-label="Select all candidates shown" title="Select all shown" className="h-4 w-4 accent-forest" />
+                  </th>
+                  <th className="px-3 py-3 font-medium">Candidate</th>
                   <th className="px-3 py-3 font-medium">Job</th>
                   <th className="px-3 py-3 font-medium">Score</th>
                   <th className="px-3 py-3 font-medium">AI suggests</th>
@@ -231,7 +256,16 @@ function CandidatesList() {
               <tbody className="divide-y divide-line">
                 {shown!.map((r) => (
                   <tr key={r.id} className="animate-row group relative transition-colors hover:bg-paper/70">
-                    <td className="px-5 py-3.5">
+                    <td className="py-3.5 pl-5">
+                      <input
+                        type="checkbox"
+                        checked={picked.has(r.id)}
+                        onChange={() => togglePick(r.id)}
+                        aria-label={`Select ${r.name} for a detailed PDF`}
+                        className="relative z-10 h-4 w-4 accent-forest"
+                      />
+                    </td>
+                    <td className="px-3 py-3.5">
                       <Link href={`/candidates/${r.id}`} className="font-semibold after:absolute after:inset-0 group-hover:text-forest">{r.name}</Link>
                       <p className="max-w-[16rem] truncate text-ink-soft">{r.current_role || r.email || r.file_name}</p>
                       {r.dup_count > 0 && (
@@ -287,7 +321,7 @@ function CandidatesList() {
           onCancel={() => setToDelete(null)}
         />
       )}
-      {shown && !error && shown.length > 0 && <p className="mt-3 text-sm text-ink-soft">{shown.length} candidate{shown.length === 1 ? "" : "s"} shown</p>}
+      {shown && !error && shown.length > 0 && <p className="mt-3 text-sm text-ink-soft">{shown.length} candidate{shown.length === 1 ? "" : "s"} shown{pickedIds.length > 0 && ` · ${pickedIds.length} selected for PDF`}</p>}
     </>
   );
 }

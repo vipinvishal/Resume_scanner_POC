@@ -1,3 +1,4 @@
+import { fail } from "@/lib/api";
 import { z } from "zod";
 import { guard } from "@/lib/auth";
 import { getSettings } from "@/lib/db";
@@ -17,6 +18,6 @@ export async function POST(req: Request) {
     );
     return Response.json({ ok: true, ms: Date.now() - t0, reply: out.reply });
   } catch (e) {
-    return Response.json({ ok: false, error: (e as Error).message }, { status: 400 });
+    return fail(e, 400, { ok: false });
   }
 }

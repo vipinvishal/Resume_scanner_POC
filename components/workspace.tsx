@@ -1,5 +1,6 @@
 "use client";
 
+import { publicMessage } from "@/lib/friendly";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -12,6 +13,7 @@ import {
   Loader2,
   Lock,
   Search,
+  Trash2,
   Upload,
   Users,
   MessageCircleQuestion,
@@ -210,6 +212,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
   const [decisionFilter, setDecisionFilter] = useState<HrStatus | "all">("all");
   const [sort, setSort] = useState<Sort>("score_desc");
   const [toDelete, setToDelete] = useState<Row | null>(null);
+  const [deleteJobAsk, setDeleteJobAsk] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
@@ -274,7 +277,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         setNotices([]);
         rememberJob(id);
       } catch (e) {
-        setError((e as Error).message);
+        setError(publicMessage(e));
       } finally {
         setLoadingJob(false);
       }
@@ -344,7 +347,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       patch(row.uid, { state: "done", id: data.id, report: data.report, hr: "pending", dups: dups.length, dupTip: dups[0] ? dupTipOf(dups[0]) : "", created: new Date().toISOString() });
       return data.report.quick ? { uid: row.uid, id: data.id, score: data.report.score } : null;
     } catch (e) {
-      patch(row.uid, { state: "error", error: (e as Error).message });
+      patch(row.uid, { state: "error", error: publicMessage(e) });
       return null;
     }
   }
@@ -369,7 +372,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       return true;
     } catch (e) {
       mark((d) => ({ ...d, reviewing: false }));
-      setNotices((n) => (n.length ? n : [`AI review stopped: ${(e as Error).message} The instant-check results are kept.`]));
+      setNotices((n) => (n.length ? n : [`AI review stopped: ${publicMessage(e)} The instant-check results are kept.`]));
       return false;
     }
   }
@@ -393,7 +396,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       if (!r.ok) throw new Error(d.error ?? "Couldn't load the saved resumes.");
       setLibrary(d);
     } catch (e) {
-      setLibError((e as Error).message);
+      setLibError(publicMessage(e));
     }
   }, []);
 
@@ -428,7 +431,7 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
         void loadSavedJobs();
         setJd({ text: "", file: null });
       } catch (e) {
-        setError((e as Error).message);
+        setError(publicMessage(e));
         setRunning(false);
         return;
       }
@@ -498,7 +501,26 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
       loadStats();
       void loadSavedJobs();
     } catch (e) {
-      setDeleteError((e as Error).message);
+      setDeleteError(publicMessage(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function confirmDeleteJob() {
+    if (!job) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't delete that job description.");
+      setDeleteJobAsk(false);
+      pickJob("new");
+      void loadSavedJobs();
+      loadStats();
+      setLibrary(null);
+    } catch (e) {
+      setDeleteError(publicMessage(e));
     } finally {
       setDeleting(false);
     }
@@ -627,6 +649,15 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
             <ChevronDown size={18} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
           </div>
           {loadingJob && <Loader2 size={18} className="animate-spin text-forest" />}
+          {job && (
+            <button
+              onClick={() => (setDeleteError(""), setDeleteJobAsk(true))}
+              disabled={running || loadingJob}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-soft transition-colors hover:border-reject/50 hover:bg-reject-bg hover:text-reject disabled:opacity-40"
+            >
+              <Trash2 size={15} /> Delete job
+            </button>
+          )}
         </div>
       )}
 
@@ -1007,6 +1038,18 @@ export default function Workspace({ engineReady }: { engineReady: boolean }) {
           </Card>
         )}
       </section>
+
+      {deleteJobAsk && job && (
+        <ConfirmDialog
+          title="Delete this job description?"
+          message={`Delete "${job.title}" permanently? This also removes its ${rows.filter((r) => r.res.state === "done").length || "saved"} screening result(s) and the decisions made on them. Resumes that were only screened for this job will no longer appear under "From saved resumes". This can't be undone.`}
+          confirmLabel="Delete job"
+          busy={deleting}
+          error={deleteError}
+          onConfirm={confirmDeleteJob}
+          onCancel={() => setDeleteJobAsk(false)}
+        />
+      )}
 
       {toDelete && toDelete.res.state === "done" && (
         <ConfirmDialog

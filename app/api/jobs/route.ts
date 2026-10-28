@@ -39,6 +39,6 @@ export async function POST(req: Request) {
     const job = await createJob(title, text, requirements, currentActor());
     return Response.json(job);
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 400 });
+    return fail(e, 400);
   }
 }

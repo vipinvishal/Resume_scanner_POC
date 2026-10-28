@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, MessageCircleQuestion, Printer, RotateCcw, Send, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, Loader2, MessageCircleQuestion, Printer, RotateCcw, Send, XCircle } from "lucide-react";
 import type { HrStatus, Verdict } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
 import { StatusBadge, VerdictBadge, btn, cx, formatDate } from "./ui";
@@ -29,11 +29,18 @@ const OPTIONS: { status: Choice; label: string; sub: string; icon: React.Element
   { status: "rejected", label: "Reject", sub: "Close with a reason", icon: XCircle, on: "bg-reject text-on-solid", ring: "hover:border-reject/60 hover:bg-reject-bg/50" },
 ];
 
-export function PrintButton() {
+export function PrintButton({ id }: { id?: number }) {
   return (
-    <button onClick={() => window.print()} className={btn.ghost}>
-      <Printer size={16} /> Save as PDF
-    </button>
+    <div className="flex gap-2">
+      {id && (
+        <a href={`/api/candidates/${id}/pdf`} className={btn.ghost}>
+          <FileText size={16} /> Download PDF report
+        </a>
+      )}
+      <button onClick={() => window.print()} className={btn.ghost}>
+        <Printer size={16} /> Print
+      </button>
+    </div>
   );
 }
 

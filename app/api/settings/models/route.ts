@@ -1,3 +1,4 @@
+import { fail } from "@/lib/api";
 import { guard } from "@/lib/auth";
 import { getSettings } from "@/lib/db";
 import { listModels } from "@/lib/llm";
@@ -11,6 +12,6 @@ export async function POST(req: Request) {
   try {
     return Response.json({ models: await listModels(s) });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 400 });
+    return fail(e, 400);
   }
 }

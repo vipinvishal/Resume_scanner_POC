@@ -1,3 +1,4 @@
+import { fail } from "@/lib/api";
 import { currentActor, guard } from "@/lib/auth";
 import { findDuplicates, getJob, getReviewInput, getSettings, updateCandidateReport } from "@/lib/db";
 import { reviewResume } from "@/lib/analyze";
@@ -24,6 +25,6 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     const duplicates = await findDuplicates({ name: report.candidate.name, email: report.candidate.email, hash: input.hash, jobId: input.jobId, excludeId: id });
     return Response.json({ id, report, gate_missing: gate, duplicates });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 400 });
+    return fail(e, 400);
   }
 }

@@ -604,6 +604,24 @@ export async function deleteCandidate(id: number, actor = "system") {
   if (cur) await writeAudit(d, { actor, action: "deleted", candidateId: id, jobId: Number(cur.job_id), summary: `Deleted the record of ${cur.name}` });
 }
 
+/** Permanently remove a job description together with every screening result saved for it. */
+export async function deleteJob(id: number, actor = "system"): Promise<{ title: string; candidates: number } | null> {
+  const d = await db();
+  const job = (await d.all<{ title: string }>(`SELECT title FROM ${JOBS} WHERE id = ?`, [id]))[0];
+  if (!job) return null;
+  const candidates = Number((await d.all<{ n: number }>(`SELECT COUNT(*) AS n FROM ${CANDS} WHERE job_id = ?`, [id]))[0].n);
+  await d.run(`DELETE FROM ${HIST} WHERE candidate_id IN (SELECT id FROM ${CANDS} WHERE job_id = ?)`, [id]);
+  await d.run(`DELETE FROM ${CANDS} WHERE job_id = ?`, [id]);
+  await d.run(`DELETE FROM ${JOBS} WHERE id = ?`, [id]);
+  await writeAudit(d, {
+    actor,
+    action: "deleted",
+    jobId: id,
+    summary: `Deleted job description "${job.title}" and ${candidates} screening result${candidates === 1 ? "" : "s"}`,
+  });
+  return { title: job.title, candidates };
+}
+
 /**
  * Merge a duplicate record into the one being kept: the duplicate is deleted, and if the kept record has no decision yet
  * it takes over the duplicate's decision and note, so HR's earlier work isn't lost.

@@ -1,5 +1,6 @@
 "use client";
 
+import { publicMessage } from "@/lib/friendly";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -154,7 +155,7 @@ export default function Chatbot() {
       save(done);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
-      setMessages([...next, { role: "error", content: (e as Error).message }]);
+      setMessages([...next, { role: "error", content: publicMessage(e) }]);
     } finally {
       setBusy(false);
     }

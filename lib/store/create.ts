@@ -1,7 +1,9 @@
 import type { DbConfig, DbType } from "../types";
 
 /** A problem with a ready-made message for HR, so callers show it as written instead of wrapping it. */
-export class FriendlyDbError extends Error {}
+export class FriendlyDbError extends Error {
+  name = "FriendlyDbError";
+}
 
 /** Letters, numbers, underscore and hyphen, starting with a letter or underscore. Anything else is never put into SQL. */
 const SAFE_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,62}$/;

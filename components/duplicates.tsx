@@ -1,5 +1,6 @@
 "use client";
 
+import { publicMessage } from "@/lib/friendly";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -38,7 +39,7 @@ export default function DuplicatesPanel({ id, name, duplicates }: { id: number; 
       setTarget(null);
       router.refresh();
     } catch (e) {
-      setError((e as Error).message);
+      setError(publicMessage(e));
     } finally {
       setBusy(false);
     }
